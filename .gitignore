@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 环境/密钥
+.env
+.env.*
+*.key
+*.pem
+
+# 系统
+.DS_Store
+Thumbs.db
+
+# 编辑器
+.vscode/
+.idea/
+
+# 构建产物
+build/
+dist/
+*.o
+*.so
+
+# 本地运行输出（评测结果不入库，保留在 monogs-ours/results）
+results/
+output/

@@ -1,0 +1,59 @@
+{
+  "meta": {
+    "description": "动态 3DGS SLAM 评测数据集清单。本仓库聚焦单目序列，但保留 RGB-D 数据集用于横向参考。",
+    "last_updated": "2026-09-01"
+  },
+  "datasets": [
+    {
+      "id": "bonn",
+      "name": "Bonn RGB-D Dynamic",
+      "modality": "rgb-d",
+      "dynamic_level": "高（人物/复杂动态）",
+      "sequences": ["rgbd_bonn_balloon", "rgbd_bonn_balloon2", "rgbd_bonn_crowd", "rgbd_bonn_crowd2", "rgbd_bonn_mv_no_box", "rgbd_bonn_pt2", "rgbd_bonn_obox", "rgbd_bonn_obox2", "rgbd_bonn_synchronous", "rgbd_bonn_f2_desk_with_person", "rgbd_bonn_f3_long_office_household"],
+      "metrics": ["ATE RMSE", "RPE"],
+      "local_path": "/data/Datasets/Bonn",
+      "used_by": ["WildGS-SLAM", "DGS-SLAM", "DG-SLAM", "GARAD-SLAM", "Gassidy", "RoGS-SLAM"]
+    },
+    {
+      "id": "tum",
+      "name": "TUM RGB-D",
+      "modality": "rgb-d",
+      "dynamic_level": "低-中（含动态序列如 freiburg3_walking_xyz）",
+      "sequences": ["rgbd_dataset_freiburg1_desk", "rgbd_dataset_freiburg3_walking_xyz", "rgbd_dataset_freiburg3_walking_halfsphere"],
+      "metrics": ["ATE RMSE", "RPE"],
+      "local_path": "/data/Datasets/TUM",
+      "used_by": ["WildGS-SLAM", "MonoGS", "SplaTAM", "RoGS-SLAM"]
+    },
+    {
+      "id": "replica",
+      "name": "Replica",
+      "modality": "rgb-d（合成）",
+      "dynamic_level": "静态（用于几何/渲染质量）",
+      "sequences": ["office0", "room0"],
+      "metrics": ["ATE", "PSNR", "SSIM", "LPIPS"],
+      "local_path": "/data/Datasets/Replica",
+      "used_by": ["MonoGS", "SplaTAM", "WildGS-SLAM", "RoGS-SLAM"]
+    },
+    {
+      "id": "wild-slam",
+      "name": "Wild-SLAM Dataset",
+      "modality": "monocular",
+      "dynamic_level": "高（in-the-wild 动态干扰）",
+      "sequences": ["Mocap 系列", "crowd_demo"],
+      "metrics": ["ATE", "渲染质量"],
+      "local_path": null,
+      "note": "WildGS-SLAM 自建数据集，Mocap GT 位姿。下载见 WildGS-SLAM 官方 repo scripts_downloading/。",
+      "used_by": ["WildGS-SLAM", "GARAD-SLAM"]
+    },
+    {
+      "id": "scannet",
+      "name": "ScanNet",
+      "modality": "rgb-d",
+      "dynamic_level": "静态为主",
+      "sequences": ["—"],
+      "metrics": ["ATE", "渲染质量"],
+      "local_path": null,
+      "used_by": ["WildGS-SLAM"]
+    }
+  ]
+}

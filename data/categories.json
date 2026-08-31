@@ -1,0 +1,34 @@
+{
+  "categories": [
+    {
+      "id": "anti-dynamic",
+      "name": "Anti-Dynamic（抗动态）",
+      "definition": "把动态物体/动态像素视为干扰，通过检测、剔除、降权、mask 等方式在 tracking 与 mapping 中抑制其影响，最终只维护/重建静态场景地图。动态物体不进入显式建模，其运动信息被丢弃。",
+      "characteristics": [
+        "动态区域被 soft/hard 剔除或降权",
+        "输出为静态地图 + 相机轨迹",
+        "通常需要运动/一致性先验（光流、深度残差、语义、不确定性）",
+        "可细分为：不确定性加权、语义 mask、光流 mask、几何一致性、概率滤波"
+      ],
+      "examples": ["WildGS-SLAM", "DGS-SLAM", "DG-SLAM", "GARAD-SLAM", "Dy3DGS-SLAM", "Gassidy", "BDGS-SLAM", "PG-SLAM", "RoGS-SLAM"]
+    },
+    {
+      "id": "face-dynamic",
+      "name": "Face-Dynamic（面向动态/显式动态建模）",
+      "definition": "把动态物体本身作为建模对象，显式估计/重建其时空变化（运动场、变形场、4D 高斯、时间戳）。静态与动态使用统一或分离的表示，输出可对动态内容进行时序重建。",
+      "characteristics": [
+        "动态物体进入显式表示（4D 高斯 / deformation field / motion field）",
+        "输出为可渲染的时空场景，而不仅是静态地图",
+        "跟踪可利用动态物体运动信息（而不只是规避）",
+        "计算与内存开销通常高于 anti-dynamic"
+      ],
+      "examples": ["d2gslam", "gs-dmsr"]
+    },
+    {
+      "id": "static-base",
+      "name": "静态基座（Base，非动态方法）",
+      "definition": "假设场景静止，不做任何动态处理。作为动态方法的基座或对比下限。",
+      "examples": ["monogs", "splatam", "gs-slam", "monogs-pp", "splat-slam"]
+    }
+  ]
+}
