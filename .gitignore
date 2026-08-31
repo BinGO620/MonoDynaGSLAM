@@ -28,3 +28,4 @@ dist/
 # 本地运行输出（评测结果不入库，保留在 monogs-ours/results）
 results/
 output/
+datasets/
