@@ -172,61 +172,56 @@ def main():
                 if dyn_frac > 0.01:
                     opacities.data.mul_(max(0.9, 1.0 - 0.02 * dyn_frac * 10))
 
-    # Phase A: 静态基线（不用 offset）
-    K_STATIC = 800
+    # Phase A: 短暂静态初始化（500 iters，给 shared params 一个合理起点）
+    K_STATIC = 500
     opt_shared = torch.optim.Adam([
         {"params": [means, quats, scales, opacities, colors], "lr": 1e-2},
         {"params": [viewmats_param], "lr": args.pose_lr},
     ])
-    print(f"Phase A: 静态基线 {K_STATIC} iters")
+    print(f"Phase A: 静态初始化 {K_STATIC} iters")
     for it in range(K_STATIC):
         opt_shared.zero_grad()
         r, _, _ = rasterization(means, quats, scales, opacities, colors,
                                 viewmats_param, Ks, W, H)
         loss = torch.nn.functional.mse_loss(r.squeeze(0).permute(0,3,1,2), images)
         loss.backward(); opt_shared.step()
-        if it % 200 == 0:
+        if it % 100 == 0:
             print(f"  {it}: {(-10*torch.log10(loss+1e-8)).item():.1f} dB")
 
-    # Phase B: per-frame face-dynamic
-    opt_offset = torch.optim.Adam([{"params": [frame_offsets], "lr": args.offset_lr}])
+    # Phase B: 联合优化 — 每帧独立渲染所有帧，offset 与 shared params 同步优化
+    # 显存优化：把 batch_frames 提高，每次渲染所有 batch_frames 帧
+    opt_joint = torch.optim.Adam([
+        {"params": [means, quats, scales, opacities, colors], "lr": 5e-3},
+        {"params": [viewmats_param], "lr": args.pose_lr},
+        {"params": [frame_offsets], "lr": args.offset_lr},
+    ])
     remaining = args.iters - K_STATIC
-    print(f"Phase B: per-frame face-dynamic {remaining} iters (batch={args.batch_frames})")
+    print(f"Phase B: 联合 per-frame 优化 {remaining} iters (batch={args.batch_frames})")
     for it in range(remaining):
         global_it = K_STATIC + it
         if args.anti and it > 0 and it % args.anti_period == 0:
             anti_update()
 
-        # 优化 static params：用 mean offset 渲染（proxy）
-        if it % 3 == 0:
-            opt_shared.zero_grad()
-            avg_off = frame_offsets.mean(dim=0).unsqueeze(0)  # (1,n_dyn,3)
-            off_full = torch.zeros(1,n_g,3,device=device)
-            off_full[:,dyn_idx,:] = avg_off
-            md = means + off_full
-            r, _, _ = rasterization(md, quats, scales, opacities, colors,
-                                    viewmats_param, Ks, W, H)
-            loss_s = torch.nn.functional.mse_loss(r.squeeze(0).permute(0,3,1,2), images)
-            loss_s.backward(); opt_shared.step()
-
-        # 优化 per-frame offset：逐帧渲染
-        opt_offset.zero_grad()
+        # 逐帧独立渲染（关键：每帧有自己的 means）
+        opt_joint.zero_grad()
+        # 随机采 batch_frames 帧
         batch_idx = np.random.choice(n_frames, min(args.batch_frames, n_frames), replace=False)
         batch_loss = 0
         for fi in batch_idx:
             mf = make_means_fi(fi)
             rf, _, _ = rasterization(mf, quats, scales, opacities, colors,
                                      viewmats_param[:,fi:fi+1], Ks[:,fi:fi+1], W, H)
-            # rf shape: (1,1,H,W,3) → (H,W,3)
             loss_fi = torch.nn.functional.mse_loss(
                 rf.reshape(H,W,3), images[fi].permute(1,2,0))
             batch_loss = batch_loss + loss_fi
         batch_loss = batch_loss / len(batch_idx)
-        reg = frame_offsets.pow(2).mean() * 0.005
-        (batch_loss + reg).backward(); opt_offset.step()
+        # 轻量 offset 正则化
+        reg = frame_offsets.pow(2).mean() * 0.0005
+        (batch_loss + reg).backward(); opt_joint.step()
 
         if it % 500 == 0 or it == remaining - 1:
             with torch.no_grad():
+                # 用 mean offset 评估整体
                 avg = frame_offsets.mean(dim=0).unsqueeze(0)
                 off_f = torch.zeros(1,n_g,3,device=device)
                 off_f[:,dyn_idx,:] = avg
