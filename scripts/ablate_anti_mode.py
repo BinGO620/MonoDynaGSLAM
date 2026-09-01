@@ -57,7 +57,7 @@ def main():
     ap.add_argument("--seq_dir", default=None)
     ap.add_argument("--mode", required=True,
                     choices=["none", "global_residual", "random_decay", "pixel_mask",
-                             "selective", "random_gauss", "combined"])
+                             "selective", "random_gauss", "combined", "gated_selective"])
     ap.add_argument("--res", type=int, default=320)
     ap.add_argument("--iters", type=int, default=2500)
     ap.add_argument("--max_points", type=int, default=60000)
@@ -175,11 +175,23 @@ def main():
         return selected
 
     @torch.no_grad()
-    def anti_update_selective():
-        """F: 真正的 selective Gaussian anti（投影归因 + 逐高斯衰减）。"""
+    def anti_update_selective(gated=False):
+        """F: selective Gaussian anti（投影归因 + 逐高斯衰减）。
+        gated=True 时按帧级动态占比一致性门控：动态占比序列均值 < 2% 则跳过。"""
+        rends, _, _ = rasterization(means, quats, scales, opacities.detach(), colors,
+                                    viewmats_param.detach(), Ks, W, H)
+        residual = (rends.squeeze(0).permute(0,3,1,2) - images).abs().mean(dim=1)
+        # 门控：序列级动态占比（中位帧的 dyn_frac）
+        if gated:
+            dfs = []
+            for fi in range(n_frames):
+                med = residual[fi].median(); std = residual[fi].std() + 1e-8
+                dfs.append((residual[fi] > med + args.tau * std).float().mean().item())
+            if float(np.median(dfs)) < 0.02:
+                return 0  # 静态场景，跳过
         selected = selective_gaussian_mask()
-        if len(selected) == 0: return
-        opacities.data.view(n_g)[selected] *= 0.9  # 每个被选中高斯独立衰减
+        if len(selected) == 0: return 0
+        opacities.data.view(n_g)[selected] *= 0.9
         return len(selected)
 
     @torch.no_grad()
@@ -238,6 +250,9 @@ def main():
             elif args.mode == "selective":
                 n_sel = anti_update_selective()
                 if it % 500 == 0: print(f"    [selective] {n_sel} gaussians suppressed")
+            elif args.mode == "gated_selective":
+                n_sel = anti_update_selective(gated=True)
+                if it % 500 == 0: print(f"    [gated] {n_sel} suppressed")
             elif args.mode == "combined":
                 anti_update_global_residual()
                 n_sel = anti_update_selective()
