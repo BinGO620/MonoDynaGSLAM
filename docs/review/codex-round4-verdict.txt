@@ -1,0 +1,969 @@
+Reading additional input from stdin...
+2026-09-01T20:25:48.796416Z ERROR codex_core::session::session: failed to load skill /home/cb/.cc-switch/skills/3dgs-experiment-planner/SKILL.md: missing YAML frontmatter delimited by ---
+2026-09-01T20:25:48.796445Z ERROR codex_core::session::session: failed to load skill /home/cb/.cc-switch/skills/3dgs-paper-reader/SKILL.md: missing YAML frontmatter delimited by ---
+OpenAI Codex v0.149.1
+--------
+workdir: /data/MonoDynaGSLAM
+model: gpt-5.6-sol
+provider: custom
+approval: never
+sandbox: danger-full-access
+reasoning effort: medium
+reasoning summaries: none
+session id: 01a05ea6-3fb3-7751-a75f-929040526aca
+--------
+user
+四轮（终轮）审稿。请读 references/mechanism-validation.md 全文（重点 §12 结论收紧与 §13 n=4 最终统计）。
+
+P0 清单完成情况：
+1. A/C/D/E/F 全部 4 paired seeds (0/1/2/42) ✅
+2. mean/std/95%CI + paired 检验 ✅（F-A p=0.0023, F-C p<0.001, F-D p=0.33）
+3. 文档修正 ✅（删除 D≈A/排除正则化等被推翻表述）
+4. 结论改写 ✅（增益=正则化+不显著的归因附加）
+5. 静态负对照 2 序列 ✅（发现 fr1_desk 不可复现性 + fr2_xyz 门控误触发）
+6-7. gate ablation 和 τ 敏感性未做（P1）
+
+核心负结果: F-D=+0.18 (p=0.33) — 残差归因相对随机选择无显著优势，衰减收益主体是正则化。
+
+请评审：
+1. P0 是否实质完成？证据链是否闭合？
+2. 这个负结果定位（'机制对照研究+评估协议方法论警示'）是否比原机制故事更可辩护？
+3. 终轮评分（1-10）与建议。
+4. 若作为论文：这个负结果+方法论警示的定位够不够支撑一篇 CCF-C/ICRA 级别论文？缺什么？
+中文，严格。
+exec
+/bin/bash -lc "sed -n '1,240p' /home/cb/.codex/skills/nature-reviewer/SKILL.md && echo '---FILE---' && sed -n '1,260p' references/mechanism-validation.md" in /data/MonoDynaGSLAM
+ succeeded in 0ms:
+---
+name: nature-reviewer
+description: >-
+  Simulate Nature-style or general pre-submission peer review from the referee perspective,
+  not an author rebuttal. Use for reviewer reports, mock peer review, manuscript critique,
+  novelty/significance/technical-soundness assessment, 审稿人视角评估, 模拟审稿, 预审,
+  投稿前自审, 审稿意见模拟, or 帮我审一下论文. Produce evidence-grounded Major Concerns,
+  Minor Comments, and blocking flags. For multiple reviewers, keep every reviewer mutually
+  blind in a separate context, freeze all reports before comparison, and create any synthesis
+  only afterward as a separate editor/author-facing artifact.
+---
+
+# Nature Reviewer Assessment Skill
+
+Use this skill to simulate a `Nature`-style reviewer assessment package from the referee
+side.
+
+This skill is for reviewer-style manuscript evaluation, not for drafting the authors'
+response. If the user wants rebuttal writing, route to `nature-response`.
+
+## Default stance
+
+- Ground the review only in the local source basis plus manuscript facts supplied by the user.
+- Evaluate the manuscript against source-grounded axes: `originality`, `scientific importance`, `interdisciplinary readership`, `technical soundness`, and `readability for nonspecialists`.
+- Use the 12-axis technical concern taxonomy only as an internal coverage checklist; it supplements but never replaces the five source-grounded axes.
+- Return exactly `3 mutually blind reviewer reports + 1 post-review synthesis` unless the user explicitly asks for another structure.
+- Give every reviewer only the same immutable manuscript/source packet, the same journal criteria, and that reviewer's preassigned emphasis. Never provide another review, a shared concern ledger, a draft synthesis, or hints about what another reviewer noticed.
+- Run each reviewer in a genuinely separate context, subagent, process, or invocation. If the environment cannot isolate contexts, generate one reviewer report per invocation or explicitly state that mutual blindness cannot be guaranteed; never present shared-context drafting as independent peer review.
+- Define emphasis briefs before any report is generated. They are working lenses, not reviewer identities, specialties, institutions, or biographies.
+- Freeze each individual report before comparing them. Natural duplication or disagreement is valid evidence of independent review and must not be edited away to manufacture diversity.
+- Identify who would be interested in the results and why.
+- Identify technical failings that must be addressed before the authors' case is established.
+- Give every substantive concern a stable ID, a faithful `claim_pointer`, and a verifiable `evidence_pointer`; mark missing locations instead of inventing them.
+- Separate user-visible concerns into `Major Concerns` and `Minor Comments`. Mark a Major Concern
+  `Blocking Yes` only when the current manuscript cannot establish its central case until that
+  concern is resolved; Minor Comments are never blocking.
+- Do not impose a concern quota. If no grounded concern exists at a level, state that explicitly
+  instead of inventing one.
+- Keep the critique intellectually sharp but professionally phrased; severity comes from impact
+  on the manuscript's case, not from hostile wording.
+- Avoid em dashes, en dashes, and colons as routine prose punctuation throughout reviewer reports and synthesis. Prefer a new sentence, comma, semicolon, parentheses, or a short heading followed by a new line. Retain ordinary hyphens in standard compound terms and stable IDs such as `R1-M1`. Preserve punctuation in source-faithful titles, quotations, formulas, identifiers, URLs, times, and required machine-readable syntax when changing it would be inaccurate.
+- Distinguish clearly between what is supported, what is weak, and what is not assessable from the provided material.
+- When the manuscript has a clear technical domain, use claim-dependent domain gates as supporting checks, but keep the output inside the same 3-reviewer `nature-reviewer` structure.
+- Do not claim the editor's final decision or certainty about fit to `Nature`.
+
+## Accepted inputs
+
+The skill may receive:
+
+- full manuscript draft
+- abstract, summary paragraph, or cover-summary style text
+- introduction, results, discussion, or methods excerpts
+- figure legends, selected figures, or result notes
+- author notes in Chinese or English describing the claimed contribution
+- pre-submission positioning notes
+
+If the provided material is partial, perform a bounded review and mark the assessment boundary explicitly.
+
+## Workflow
+
+1. Identify the input scope and whether the job is a reviewer-style assessment rather than rebuttal drafting.
+2. Build one immutable review packet containing only the supplied manuscript, verified source anchors, assessment boundary, and common journal criteria. Do not add analytical conclusions or suspected concerns to this packet.
+3. Define the reviewer count and emphasis briefs before launching any reviewer.
+4. Launch each reviewer in an isolated context. Pass only the immutable review packet, that reviewer's emphasis brief, the common report skeleton, and the same grounding rules.
+5. Inside each isolated review, independently assess readiness and the source-grounded axes, then build that reviewer's own concern ledger using `references/technical-concern-taxonomy.md`. If relevant, load only the applicable section of `references/domain-specific-review-gates.md` inside that same isolated context.
+6. Finalize and freeze every reviewer report. Do not show a completed or partial report to another reviewer, and do not redistribute concerns to control overlap.
+7. Only after all reports are frozen, compare them in a separate synthesis pass. Reconcile independently created concerns to shared synthesis keys, and label consensus only when at least two reports independently raise the same underlying concern.
+8. Generate `Cross-review synthesis (post-review; not shown to reviewers)` with consensus blocking concerns, other major concerns, the minor-revision checklist, and genuine differences in emphasis or judgment.
+9. Run QA for reviewer isolation, severity calibration, blocking calibration, evidence anchoring, groundedness, coverage, role boundaries, and non-invention. Overlap is measured only after freezing and must never trigger retroactive rewriting of individual reports.
+
+## Output format
+
+Unless the user asks for another format, return:
+
+```text
+Review setup
+- **Input scope** [value]
+- **Assessment boundary** [value]
+- **Shared manuscript claim summary** [value]
+- **Visible evidence base** [value]
+- **Missing materials affecting confidence** [value]
+
+Reviewer 1
+- **Overall assessment** [text]
+- **Who would be interested in the results, and why** [text]
+- **Major strengths** [text]
+- **Major Concerns** [items]
+- **Minor Comments** [items]
+- **Technical failings that need to be addressed before the case is established** [IDs or summary]
+- **Assessment against Nature-style criteria** [text]
+- **Recommendation posture** [text]
+
+For each Major Concern
+- **Concern ID** R1-M1
+- **Severity** Major
+- **Blocking** Yes / No
+- **Axis** [value]
+- **Claim pointer** [value]
+- **Evidence pointer** [value]
+- **Concern** [text]
+- **Why it matters** [text]
+- **Resolution test** [text]
+
+For each Minor Comment
+- **Concern ID** R1-m1
+- **Severity** Minor
+- **Axis** [value]
+- **Affected element** [value]
+- **Evidence pointer** [value]
+- **Issue** [text]
+- **Required correction** [text]
+
+Reviewer 2
+[Same structure]
+
+Reviewer 3
+[Same structure]
+
+Cross-review synthesis (post-review; not shown to reviewers)
+- **Consensus strengths** [text]
+- **Consensus blocking concerns** [items]
+- **Other consensus major concerns** [items]
+- **Where emphasis differs across reviewers** [text]
+- **Minor revision checklist** [items]
+- **Broad-interest / significance readout** [text]
+- **Most important issues to resolve before a strong Nature-style case is established** [items]
+
+Risk / unsupported claims
+- [specific unsupported or not-assessable items]
+```
+
+## Red lines
+
+- Do not invent reviewer identities, specialty roles, or selection history.
+- Do not let one reviewer read, cite, anticipate, agree with, or respond to another review.
+- Do not build or distribute a shared concern ledger before individual reports are frozen.
+- Do not rewrite independent reports after comparison merely to reduce duplication or create artificial disagreement.
+- Do not call reports mutually blind when they were generated in a shared context without an explicit limitation notice.
+- Do not use dash punctuation or colons as habitual sentence connectors when clearer punctuation, headings, or sentence boundaries work.
+- Do not invent experiments, validations, controls, citations, figure details, line numbers, or prior-work distinctions not present in the input.
+- Do not silently turn reviewer assessment into author rebuttal drafting.
+- Do not present the review as an editorial decision letter.
+- Do not state that the manuscript belongs in `Nature` as a settled fact.
+- Do not omit technical failings when the provided evidence does not establish the authors' case.
+- Do not create Major or Minor concerns merely to fill a quota or make reviewer reports look balanced.
+- Do not downgrade a core evidence, validity, ethics, or integrity problem to Minor because it is
+  easy to describe, and do not upgrade a local presentation issue merely to sound severe.
+
+## Related files
+
+| File | Open when |
+|---|---|
+| [references/source-basis.md](references/source-basis.md) | You need source provenance, local rule summaries, or source-vs-implementation boundaries |
+| [references/reviewer-workflow.md](references/reviewer-workflow.md) | You need the invocation order, fact-base extraction flow, or synthesis rules |
+| [references/review-axes.md](references/review-axes.md) | You need the evaluation axes or reviewer weighting logic |
+| [references/technical-concern-taxonomy.md](references/technical-concern-taxonomy.md) | You need the internal 12-axis coverage check, concern ledger, or claim/evidence-pointer rules |
+| [references/domain-specific-review-gates.md](references/domain-specific-review-gates.md) | The manuscript has clear chemistry, engineering, materials, atmospheric, climate-ecology, hydrology, or remote-sensing evidence chains |
+| [references/report-structure.md](references/report-structure.md) | You need the default output contract or section anatomy |
+| [references/role-boundaries.md](references/role-boundaries.md) | You need constraints on reviewer differences and editor-versus-reviewer boundaries |
+| [references/qa-checklist.md](references/qa-checklist.md) | You are finalizing an output and need groundedness / non-invention checks |
+| [../nature-shared/core/consistency-sweep.md](../nature-shared/core/consistency-sweep.md) | You are checking the manuscript against itself: headline counts that do not reconcile with the Methods, one metric at two precisions, a superlative contradicted by the paper's own table, overlapping error bars presented as an advantage, or internal summaries that disagree |
+| [references/editorial criteria and processes.md](<references/editorial criteria and processes.md>) | You need the primary local Nature source text |
+
+## Source hierarchy
+
+Use sources in this order:
+
+1. `references/editorial criteria and processes.md`
+2. manuscript facts supplied by the user
+3. conservative local implementation rules documented in `references/source-basis.md`
+4. domain-specific supporting gates in `references/domain-specific-review-gates.md`
+
+If a user asks for policy-level certainty beyond this local source, state the limit instead of improvising broader journal policy.
+---FILE---
+# 机制验证矩阵：对 codex 审稿意见的实验回应
+
+> 2026-09-01 · 回应 docs/review/codex-review-verdict.txt（3×4/10 Reject）
+> 全部实验：RTX 2060，320×240，单 seed（多种子待补），GT pose 初始化 + 微调
+
+## 1. A-F 完整消融矩阵（fr3_walking_xyz，50帧，60k 高斯）
+
+| 组别 | 机制 | PSNR | Δ vs A | 回答的问题 |
+|---|---|---|---|---|
+| **A** | 无 anti（baseline） | 24.03 | — | 参照 |
+| **B** | 残差调制全局衰减（原实现） | 25.42 | +1.39 | 当前实现的效果 |
+| **C** | 固定衰减（无残差信息） | 24.06 | +0.03 | **衰减本身无效** |
+| **D** | 随机选 1/3 高斯衰减（数量匹配 F） | 24.12 | +0.09 | **随机选择无效** |
+| **E** | 逐像素 hard mask（标准做法） | 21.97 | -2.06 | **像素粒度错误** |
+| **F** | 残差归因选择性高斯衰减 | 25.00 | +0.97 | **归因选择有效** |
+
+### 机制结论（回应 R1-M1 / R2-M1）
+
+1. C ≈ A 且 D ≈ A → codex 的"隐式正则化"替代解释**被排除**：收益不来自 opacity 衰减本身，也不来自随机选择；
+2. F > A (+0.97) 且 F > D (+0.88) → **残差归因的选择性是收益来源**，机制成立；
+3. F < B (+0.42) → 残差信号中还含有全局成分（B 的全局调制利用了它）；诚实结论：**残差信号同时有选择性成分（F 验证）和全局成分（B 验证）**；
+4. E < A → 逐像素硬 mask 丢失信息，像素粒度不是正确的操作粒度。
+
+## 2. F 的多序列泛化（回应 R1-M3）
+
+| 序列 | baseline (A) | selective (F) | Δ |
+|---|---|---|---|
+| fr3_walking_xyz | 24.03 | 25.00 | **+0.97** |
+| fr3_walking_halfsphere | 23.75 | 24.58 | **+0.83** |
+| fr3_walking_rpy | 24.34 | 25.19 | **+0.85** |
+
+F 在三个动态序列上一致 +0.8~1.0 dB，跨序列稳定。
+
+## 3. 选中高斯与 GT 动态 mask 的量化对应（回应 R3-M1/M2）
+
+Bonn balloon（有 dynamic_mask_gtmc GT，全局动态占比 3.8%）：
+
+| 选择策略 | GT precision（选中高斯投影落在动态 mask 内的比例） |
+|---|---|
+| selective（残差归因） | **7.9%** |
+| random（同数量） | 3.9%（≈ 先验 3.8%） |
+
+- selective 的动态指向性是随机先验的 **2 倍** → 机制确实倾向选中动态高斯；
+- 绝对 precision 低（92% 选中高斯在静态区） → 残差信号混有深度先验误差、遮挡边界、光照变化的噪声。**不声称"动态高斯识别"，只声称"不一致高斯的选择性抑制"。**
+
+## 4. 修正后的机制命名（回应"事实性错误"批评）
+
+旧声称（错误）："Gaussian 级 anti-dynamic——识别动态高斯并压制"
+
+修正声称（可辩护）："**残差引导的选择性高斯 opacity 衰减**（residual-guided selective Gaussian opacity decay）：
+- 通过投影归因把多帧渲染残差定位到具体高斯；
+- 选择性地衰减不一致高斯的 opacity（~1/3 高斯）；
+- 与动态区域有统计对应（2× 随机先验）但不等于动态识别；
+- 三个对照（C/D/E）排除衰减正则化、随机选择、像素粒度的替代解释。"
+
+## 5. 尚未完成（codex 要求清单剩余项）
+
+- [x] held-out 帧评估已完成（见 §8）：stride=2 半训练协议，F held-out +0.74 dB
+- [x] A/F 4 seeds 完成（§7）；C/D/E 多种子进行中
+- [ ] 静态序列负对照
+- [ ] PnP 四组析因（PnP only / +refine / +anti / +both）——PnP+4.1dB 归因修正
+- [ ] 与 WildGS-SLAM / Gassidy 同协议对比
+- [ ] B（全局调制）与 F（选择性）的组合消融
+- [ ] τ 自动选择
+
+## 6. PnP 四组析因（回应 R1-M2，2026-09-01 补充）
+
+walking_xyz，PnP init（ATE=6.0cm），60k 高斯，2500 iters：
+
+| 组合 | PSNR | ATE | Δ vs PnP only |
+|---|---|---|---|
+| PnP only | 16.2 dB | 6.0 cm | — |
+| PnP + refine（位姿微调） | 19.0 dB | 6.1 cm | **+2.8** |
+| PnP + anti（无 refine） | 16.3 dB | 6.0 cm | **+0.1** |
+| PnP + refine + anti | 20.3 dB | 6.6 cm | +4.1 |
+
+### 修正后的结论
+
+1. **原声称"非 GT 初始化下 anti 提升更大（+4.1 dB）"是归因错误**——refine 贡献 2.8 dB，anti 单独仅 0.1 dB，协同 +1.2 dB；
+2. **anti 单独在位姿不准时几乎无效**：位姿误差淹没渲染残差信号；
+3. GT init 下 anti 的 +1.4 dB 仍然成立（位姿准 → 残差信号可用）；
+4. 存在 **refine × anti 协同效应**（+1.2 dB 交互项），机制待解释（可能：refine 后残差信号变干净，anti 才能正确归因）。
+
+### 修正后的机制边界声明
+
+> 残差引导的选择性 opacity 衰减的有效性**以位姿质量为前提**。GT/精调位姿下 +0.8~1.4 dB；粗糙位姿下单独使用无效，需与位姿优化协同（+1.2 dB 交互）。
+
+## 7. 多种子统计（回应 R1-M3 / R2-M3，2026-09-01 补充）
+
+walking_xyz，2500 iters，60k 高斯，paired seeds：
+
+| seed | A baseline | F selective | Δ |
+|---|---|---|---|
+| 0 | 23.39 | 24.61 | +1.22 |
+| 1 | 23.97 | 24.85 | +0.88 |
+| 2 | 23.53 | 24.62 | +1.09 |
+| 42 | 24.03 | 25.00 | +0.97 |
+
+**4/4 seeds 全部正向。paired Δ = +1.06 ± 0.17 dB（mean±std），t≈10.8（n=3, p<0.01）。**
+F 相对 A 的提升在种子维度上稳定，非单次偶然。
+
+## 8. Held-out 评估（补录，回应二轮文档矛盾）
+
+fr3_walking_xyz，stride=2 协议（训练 25 帧，评估全部 50 帧）：
+
+| 组别 | 训练帧 PSNR | held-out 帧 PSNR |
+|---|---|---|
+| A baseline | 24.03 | 16.61 |
+| F selective | 25.27 | **17.35 (+0.74)** |
+
+held-out 帧提升 +0.74 dB，泛化性确认（收益非过拟合）。held-out 绝对值低是因为训练密度减半。
+
+## 9. 统计修正（回应二轮统计不一致批评）
+
+4 seeds paired 差值 Δ = [1.22, 0.88, 1.09, 0.97]：
+- mean = 1.04 dB, std = 0.148
+- paired t 检验：t = 14.1, df = 3, **p < 0.001**（二轮前误写 n=3/t=10.8，已修正）
+
+## 10. C/D/E 多种子 + 静态负对照（二轮关键弱点，进行中）
+
+## 10. C/D/E 多种子 + 静态负对照（二轮关键弱点补强，已完成）
+
+### 动态序列 walking_xyz（3 seeds + seed42）
+
+| 模式 | seed0 | seed1 | seed2 | 3-seed mean | seed42 |
+|---|---|---|---|---|---|
+| A baseline | 23.39 | 23.97 | 23.53 | 23.63 | 24.03 |
+| C random_decay | 23.95 | 24.01 | 23.80 | 23.92 | — |
+| D random_gauss | 24.38 | 24.34 | 24.42 | **24.38** | 24.12 |
+| E pixel_mask | 22.20 | 22.09 | 22.12 | 22.14 | 21.97 |
+| F selective | 24.61 | 24.85 | 24.62 | **24.69** | 25.00 |
+
+### 静态负对照（fr1_desk，seed0）
+
+| 模式 | PSNR | Δ |
+|---|---|---|
+| A baseline | 24.22 | — |
+| F selective | **23.08** | **-1.14（退化）** |
+
+### 多种子修正后的结论（三轮证据状态）
+
+1. **排序在多种子下稳定**：F > D > C ≈ A > E，替代解释的排除结论成立且获得同等统计强度；
+2. **F-D 差距修正为 +0.46 dB**（paired，4/4 正向：+0.23/+0.51/+0.20/+0.88）——selective 相对随机选择的净优势真实但幅度有限；随机衰减 1/3 高斯本身有正则化价值（D vs A = +0.75）；
+3. **静态场景代价（新发现）**：F 在静态 fr1_desk 上退化 -1.14 dB——残差高发区来自深度先验误差而非动态物体，anti 无差别衰减损伤静态重建。**方法的启用需要动态门控**（先判断场景动态程度），这是明确的 future work；
+4. 机制叙事最终版本："residual-guided selective Gaussian opacity decay 在动态序列上稳定优于随机/固定/像素级对照（+0.3~1.1 dB），但存在静态场景误伤代价，需动态感知门控。"
+
+## 11. 动态门控（三轮改进，2026-09-01）
+
+针对 §10 发现的静态误伤，加入序列级动态门控：anti_update 前估计帧级动态占比的序列中位数，< 2% 则跳过衰减。
+
+| 场景 | A baseline | F 无门控 | **gated selective** |
+|---|---|---|---|
+| fr1_desk（静态负对照） | 24.22 | 23.08（-1.14 ✗） | **24.49（+0.27 ✓）** |
+| fr3_walking_xyz（动态） | 23.63（3-seed mean） | 24.69（+1.06 ✓） | **24.69（+1.06 ✓，无损失）** |
+
+**最终方法形态：Gated Selective Residual-guided Opacity Decay (GS-ROD)**
+- 门控在动态序列零损失，静态序列消除误伤并轻微正向；
+- 完整证据链：A-F 消融（多 seed）→ GT 归因 → held-out → 位姿边界析因 → 门控负对照。
+
+## 12. P0 修正：结论收紧与统计重估（三轮 P0-3/4/7，2026-09-01）
+
+### 12.1 被推翻的旧结论（三轮审稿指出，现正式修正）
+
+| 旧表述 | 修正 | 依据 |
+|---|---|---|
+| "D≈A（随机选择无效）" | **D-A = +0.75 dB，随机选择性衰减有明确正则化收益** | D 3-seed 24.38 vs A 23.63 |
+| "排除隐式正则化解释" | **部分排除**：固定衰减（C）无收益排除；随机高斯衰减（D）的正则化收益成立，selective 只在其上提供附加增益 | C/D 数据 |
+| "F 的收益来自残差归因" | **F 的增益 = 正则化成分（D-A ≈ +0.75）+ 选择性附加（F-D ≈ +0.31，n=3 下 p=0.087 未达显著）** | paired 统计 |
+
+### 12.2 当前统计（n=3 paired，seeds {0,1,2}）
+
+| 对比 | Δ (dB) | t(2) | p | 显著性 |
+|---|---|---|---|---|
+| F - A | +1.06 ± 0.17 | 10.74 | 0.0086 | **显著** |
+| F - C | +0.77 ± 0.10 | 13.58 | 0.0054 | **显著** |
+| F - D | **+0.31 ± 0.17** | 3.17 | **0.0866** | **未显著** |
+
+### 12.3 修正后的机制结论（最终版）
+
+> 渲染残差引导的选择性高斯 opacity 衰减在动态序列上稳定提升重建质量（+1.06 dB, p<0.01）。该增益由两部分组成：(a) 选择性 opacity 衰减的正则化效应（随机高斯衰减亦获 +0.75）；(b) 残差归因带来的附加选择性收益（+0.31），后者在当前样本量下未达统计显著（p=0.087），需要更多 seeds 确认。
+
+### 12.4 超参声明（P0-7）
+
+- τ=2.5：经 τ 消融（1.5/2.5）选择，**后验超参**；
+- 门控阈值 2%：在观察静态/动态序列 dyn_frac 分布差异后确定，**后验超参**。两者均需敏感性分析（P1）。
+
+## 13. P0 最终统计（n=4 全对齐 paired，2026-09-01）
+
+### 动态序列 walking_xyz（4 paired seeds: 0/1/2/42）
+
+| mode | mean±std | 95%CI | vs A |
+|---|---|---|---|
+| A baseline | 23.66±0.26 | ±0.25 | — |
+| C random_decay | 23.86±0.15 | ±0.15 | +0.20 |
+| **D random_gauss** | **24.48±0.19** | ±0.19 | **+0.82** |
+| E pixel_mask | 22.12±0.06 | ±0.06 | -1.54 |
+| **F selective** | **24.65±0.14** | ±0.13 | **+0.99** |
+
+### Paired 检验（决定性）
+
+| 对比 | Δ (dB) | t(3) | p | 判定 |
+|---|---|---|---|---|
+| F - A | +0.99±0.20 | 9.76 | **0.0023** | ✅ 显著 |
+| F - C | +0.79±0.09 | 17.38 | **<0.001** | ✅ 显著 |
+| **F - D** | **+0.18±0.31** | 1.16 | **0.33** | ❌ **不显著** |
+
+### 最终结论（统计闭合）
+
+1. **正发现**：selective opacity decay 在动态序列显著提升（+0.99, p=0.002）；任意选择性衰减（含随机）有正则化价值（D +0.82）；
+2. **负发现（核心）**：**残差归因的选择相对随机选择无显著优势（Δ=+0.18, p=0.33）**——"残差引导"的附加价值在本实验规模下无法证实。衰减的收益主要来自正则化而非归因；
+3. **静态场景**：fr1_desk 上 F 结果不可复现（同配置两次差 2 dB，弱残差场景的混沌敏感性）；fr2_xyz 上 F≈A（+0.08）；门控在 fr2_xyz 误触发（-0.53，阈值 2% 过低）；
+4. **方法学启示（对领域有价值）**：评估"选择性动态抑制"类方法时，**随机选择对照（D）是必须的 baseline**——省略它会把正则化收益误归因于动态识别。
+
+### 论文定位（最终）
+
+> 一项严格的机制对照研究：在组件化单目动态 3DGS 管线中，通过 5 组 × 4 seeds 的 paired 消融证明 (a) opacity 衰减正则化贡献了动态序列重建提升的大部分；(b) 残差归因的选择性附加价值不显著（p=0.33）；(c) 逐像素 mask 反而有害。结论对"选择性动态抑制"类方法的评估协议提出方法论警示。
+
+exec
+/bin/bash -lc "wc -l references/mechanism-validation.md && sed -n '261,520p' references/mechanism-validation.md" in /data/MonoDynaGSLAM
+ succeeded in 0ms:
+216 references/mechanism-validation.md
+
+codex
+结论先行：P0 在“清单执行”层面基本完成，但在“证据链闭合”层面尚未完全完成。核心负结果确实比原先的机制故事更可辩护，但目前更像一项严谨的单管线机制审计，而不是已经足以支撑广泛方法学结论的完整论文。终轮我给 5.5/10，建议“大修后重投”，当前不建议直接接收。
+
+## 1. P0 是否实质完成，证据链是否闭合
+
+### 已实质完成的部分
+
+以下 P0 项目可以认为已经完成：
+
+- A/C/D/E/F 在 walking_xyz 上进行了 4 个 paired seeds。
+- F-A、F-C、F-D 给出了 paired 检验。
+- 旧的错误叙事已经删除，包括“D≈A”“排除正则化解释”“收益主要来自残差归因”等。
+- 结论已经收紧为“正则化贡献占主要部分，归因附加收益目前不显著”。
+- 已加入静态负对照，并发现了真正重要的问题：
+  - fr1_desk 不可复现；
+  - fr2_xyz 上门控误触发；
+  - 静态场景并非简单的“方法无效”，而是可能出现误伤或门控错误。
+
+因此，P0 不再是“没有回应审稿意见”，而是已经完成了主要实验纠错和叙事纠偏。
+
+### 证据链仍未完全闭合的关键问题
+
+#### 1. §10 与 §13 的 paired 统计存在内部不一致
+
+§10 给出了 F-D 的逐 seed 差值：
+
+- +0.23
+- +0.51
+- +0.20
+- +0.88
+
+这四个差值的均值约为 +0.46 dB，而不是 §13 的 +0.18 dB。
+
+§13 的均值差 24.65 - 24.48 = +0.17 dB，只能说明两个组的“边际均值”相差约 0.17 dB，不能替代 paired 差值。对于 paired 设计，必须使用每个 seed 的成对差值再计算均值、标准差、置信区间和检验。
+
+这是当前最严重的统计闭合问题。它不一定推翻最终负结论，因为 +0.46 是否显著仍需重新计算，但它会直接损害审稿人对整个统计表的信任。
+
+必须补充：
+
+- D 和 F 的四个逐 seed 原始值；
+- 四个逐 seed 的 F-D 差值；
+- paired mean、paired SD、95% CI、t 值、p 值；
+- 说明 §10 和 §13 使用的是否是完全相同的运行配置。
+
+#### 2. §13 的“95%CI”很可能不是小样本 t 置信区间
+
+n=4 时，95% CI 通常应使用 t(3) 临界值，而不是直接使用 1.96。
+
+例如 A 的 std=0.26，若为均值的 t-based 95% CI，半宽大约为：
+
+\[
+3.182 \times 0.26 / 2 \approx 0.41
+\]
+
+而文档中报告的是 ±0.25，明显更接近 z-based CI。若表中确实是 z-based CI，应明确写成“normal-approximation CI”，不能直接称为小样本 95% CI。
+
+对于 n=4，建议：
+
+- 使用 t-based CI；
+- 同时报告逐 seed 数据；
+- 对 paired 差值使用配对置换检验或精确符号检验作为稳健性分析；
+- 不要把小样本 p 值表述成很强的总体性结论。
+
+#### 3. “随机衰减具有明确正则化收益”仍缺少 D-A 的正式显著性检验
+
+文档现在认为：
+
+- D-A ≈ +0.82，是正则化贡献；
+- F-D ≈ +0.18，且 p=0.33，不显著；
+- 因此 F 的收益主要来自正则化。
+
+这个方向是合理的，但证据还不够完整，因为 §13 没有给出 D-A 的 paired 检验，也没有给出 C-A 的检验。
+
+目前最多可以说：
+
+> D 的点估计增益较大，而 F 相对 D 的附加增益未达到显著。
+
+还不能完全说：
+
+> 正则化贡献已被统计确认，并且占据主要收益。
+
+应补充：
+
+- D-A 的 paired 检验；
+- C-A 的检验或等效性分析；
+- F-A、D-A、F-D 的置信区间；
+- 对“主要来自”的定量定义，例如贡献比例及其不确定性。
+
+#### 4. “5 组 × 4 seeds”不能外推成整个实验体系都具备四种子证据
+
+四种子主要集中在 walking_xyz。其他重要结论仍然较弱：
+
+- F 跨三个动态序列的结果看起来主要是单 seed；
+- held-out 结果是 A/F 的单次配置；
+- fr1_desk 的静态结果发生重复不一致；
+- fr2_xyz 门控误触发的统计基础不清楚；
+- Bonn balloon 的 GT mask 对应性不是四种子证据。
+
+因此，证据链可以支持“在 walking_xyz、该配置下的机制审计结论”，但还不能支持“该机制在动态序列上普遍成立”。
+
+#### 5. 静态负对照目前暴露了新问题，而不是完成了验证
+
+fr1_desk 同配置两次相差约 2 dB，这首先是可复现性故障。它使得以下结论暂时不可稳定解释：
+
+- F 在静态场景会退化；
+- 门控可以消除静态误伤；
+- GS-ROD 在静态序列上具有安全性。
+
+fr2_xyz 上门控误触发则说明阈值 2% 并非可靠的动态判别规则。换言之，门控目前不是已验证的解决方案，而是一个尚未完成的补救机制。
+
+所以 §11 的“最终方法形态”表述过强，更准确的说法应是：
+
+> 当前提出了一个带序列级门控的候选实现，但门控阈值的泛化性和误触发风险尚未充分验证。
+
+## 2. 负结果定位是否比原机制故事更可辩护
+
+是，而且明显更可辩护。
+
+原机制故事的问题是把“效果提升”直接归因于“残差能够识别动态高斯”。现有结果已经显示：
+
+- 随机高斯选择 D 也有明显提升；
+- F-D 的附加差异仅为 +0.18 dB，p=0.33；
+- GT 动态 mask precision 虽然高于随机先验，但绝对 precision 只有 7.9%，远不能称为动态高斯识别器；
+- 静态场景存在误伤和门控误触发。
+
+因此，当前更稳健的定位应当是：
+
+> 一项针对残差引导动态抑制机制的对照审计，揭示了 opacity 衰减正则化与残差归因选择性之间的混淆，并展示了随机选择对照、静态负对照和门控敏感性在评估此类方法时的必要性。
+
+这比“提出了有效的动态高斯识别机制”可靠得多。
+
+但“方法论警示”仍需避免过度泛化。当前证据能够支撑：
+
+- 在该组件化单目动态 3DGS 管线中，省略随机选择对照会造成机制归因风险；
+- 在该实验设置中，残差归因附加收益未被证实。
+
+当前证据尚不能充分支撑：
+
+- 所有选择性动态抑制方法都必须采用同样的评估协议；
+- 残差归因在一般情况下没有价值；
+- 正则化是该领域中此类方法提升的普遍主因。
+
+建议使用“case-study-based methodological warning”或“评估协议层面的风险提示”，而不是“领域级定论”。
+
+## 3. 终轮评分与建议
+
+### 评分：5.5/10
+
+分项判断如下：
+
+- 问题意识与诚实性：7/10  
+  能够主动推翻旧结论，并保留负结果，这是明显优点。
+
+- 实验设计：6/10  
+  A-F 矩阵、随机对照、像素级对照、held-out 和静态负对照都很有价值。
+
+- 统计严谨性：4/10  
+  paired 统计存在 F-D 内部不一致，CI 标注疑似错误，关键 D-A 检验缺失。
+
+- 可复现性：4/10  
+  fr1_desk 的重复运行差异约 2 dB，是明显红旗。
+
+- 机制结论强度：5/10  
+  现有数据支持“归因附加收益未证实”，但不足以支持更普遍的机制判断。
+
+- 论文贡献与新颖性：5/10  
+  方法本身的正向新颖性已明显下降，贡献主要转向机制审计和评估协议。
+
+### 建议
+
+当前建议：
+
+> 大修后重投，当前版本不建议接收。
+
+如果必须对应会议评分，更接近：
+
+> Borderline Reject / Weak Reject
+
+而不是明确 Reject。原因是研究问题并非没有价值，负结果也不是失败，而是统计和范围边界尚未达到可以放心发表的程度。
+
+## 4. 是否足以支撑 CCF-C/ICRA 级别论文
+
+以当前材料，尚不足够。
+
+它有潜力成为 CCF-C 或 ICRA 级别论文，但需要把“单一场景下的消融纠错”提升为“可复现、跨场景、可推广的机制审计与评估协议研究”。
+
+### 当前最缺的内容
+
+#### 1. 修复所有统计和数据一致性问题
+
+这是接收前置条件，不是可选增强项：
+
+- 重新核对 F-D 四个 paired 差值；
+- 统一 §10、§12、§13 的所有均值；
+- 使用正确的小样本 CI；
+- 补充 D-A、C-A 的正式检验；
+- 报告原始 per-seed 数据和完整统计脚本。
+
+#### 2. 增加跨序列、跨场景的完整矩阵
+
+至少应在多个动态和静态序列上重复：
+
+- A、C、D、E、F；
+- 关键情况下的 gate on/off；
+- 多种子或至少明确的重复次数。
+
+现在只有 walking_xyz 具备较完整的 4-seed 证据，无法支撑跨序列方法论结论。
+
+#### 3. 完成 gate ablation 和阈值敏感性
+
+这是当前论文定位中的核心缺口。至少需要：
+
+- 无门控；
+- 门控；
+- 不同阈值；
+- 动态场景、静态场景、弱动态场景；
+- 误触发率、漏触发率、性能变化。
+
+尤其是 fr2_xyz 已经证明 2% 阈值会误触发，因此不能把门控写成已经解决问题。
+
+#### 4. 解决 fr1_desk 不可复现性
+
+需要明确：
+
+- 随机源是否全部固定；
+- CUDA、cuDNN、排序、原子操作是否引入非确定性；
+- 高斯初始化、帧采样、优化器状态是否一致；
+- 两次运行的逐阶段指标；
+- 是否存在异常退出、缓存或数据读取差异。
+
+在这个问题解决前，静态负结果不能作为稳定结论。
+
+#### 5. 加入外部基线和统一协议比较
+
+文档自身已经列出 WildGS-SLAM / Gassidy，但尚未完成。若要投 ICRA 或 CCF-C，至少需要：
+
+- 与相关动态 3DGS/SLAM 方法比较；
+- 明确是否使用 GT pose、PnP、pose refinement；
+- 统一训练帧、迭代数、分辨率、硬件和评价指标；
+- 报告运行时间、显存、Gaussian 数量和额外开销。
+
+否则“方法论警示”会被认为只是在自有管线内部成立。
+
+#### 6. 将“机制研究”与“方法贡献”分开写
+
+当前论文不应继续把 GS-ROD 包装成已验证的动态识别机制。更可信的结构是：
+
+1. 提出一个可复现实验框架；
+2. 分解 opacity 衰减的正则化效应与残差归因效应；
+3. 发现随机选择对照会显著改变机制解释；
+4. 展示静态误伤与门控误触发；
+5. 提出一个尚待进一步验证的门控策略。
+
+如果继续使用“残差引导选择性衰减有效”作为主标题，正文负结果会与标题形成张力。
+
+## 最终审稿判断
+
+P0 的主要实验工作已经完成，且作者对错误机制叙事进行了必要的收缩，这是本轮最大的进步。但目前还不能称为“统计闭合”，因为 F-D 的 paired 结果在文档内部不一致，95% CI 的定义疑似错误，D-A 的显著性未报告，静态场景又暴露出不可复现和门控误触发问题。
+
+负结果定位是正确方向，甚至比原机制故事更有发表潜力。但现阶段它支撑的是：
+
+> “一个具有警示价值的单管线机制审计案例”
+
+而不是：
+
+> “已经证实的通用评估协议或普遍机制结论”。
+
+若修复统计矛盾，完成 gate/τ 敏感性，扩大跨序列验证，解决静态复现性，并加入外部基线，论文有机会达到 CCF-C/ICRA 的边缘接收线。以当前版本，建议大修后重投。
+tokens used
+59,454
+结论先行：P0 在“清单执行”层面基本完成，但在“证据链闭合”层面尚未完全完成。核心负结果确实比原先的机制故事更可辩护，但目前更像一项严谨的单管线机制审计，而不是已经足以支撑广泛方法学结论的完整论文。终轮我给 5.5/10，建议“大修后重投”，当前不建议直接接收。
+
+## 1. P0 是否实质完成，证据链是否闭合
+
+### 已实质完成的部分
+
+以下 P0 项目可以认为已经完成：
+
+- A/C/D/E/F 在 walking_xyz 上进行了 4 个 paired seeds。
+- F-A、F-C、F-D 给出了 paired 检验。
+- 旧的错误叙事已经删除，包括“D≈A”“排除正则化解释”“收益主要来自残差归因”等。
+- 结论已经收紧为“正则化贡献占主要部分，归因附加收益目前不显著”。
+- 已加入静态负对照，并发现了真正重要的问题：
+  - fr1_desk 不可复现；
+  - fr2_xyz 上门控误触发；
+  - 静态场景并非简单的“方法无效”，而是可能出现误伤或门控错误。
+
+因此，P0 不再是“没有回应审稿意见”，而是已经完成了主要实验纠错和叙事纠偏。
+
+### 证据链仍未完全闭合的关键问题
+
+#### 1. §10 与 §13 的 paired 统计存在内部不一致
+
+§10 给出了 F-D 的逐 seed 差值：
+
+- +0.23
+- +0.51
+- +0.20
+- +0.88
+
+这四个差值的均值约为 +0.46 dB，而不是 §13 的 +0.18 dB。
+
+§13 的均值差 24.65 - 24.48 = +0.17 dB，只能说明两个组的“边际均值”相差约 0.17 dB，不能替代 paired 差值。对于 paired 设计，必须使用每个 seed 的成对差值再计算均值、标准差、置信区间和检验。
+
+这是当前最严重的统计闭合问题。它不一定推翻最终负结论，因为 +0.46 是否显著仍需重新计算，但它会直接损害审稿人对整个统计表的信任。
+
+必须补充：
+
+- D 和 F 的四个逐 seed 原始值；
+- 四个逐 seed 的 F-D 差值；
+- paired mean、paired SD、95% CI、t 值、p 值；
+- 说明 §10 和 §13 使用的是否是完全相同的运行配置。
+
+#### 2. §13 的“95%CI”很可能不是小样本 t 置信区间
+
+n=4 时，95% CI 通常应使用 t(3) 临界值，而不是直接使用 1.96。
+
+例如 A 的 std=0.26，若为均值的 t-based 95% CI，半宽大约为：
+
+\[
+3.182 \times 0.26 / 2 \approx 0.41
+\]
+
+而文档中报告的是 ±0.25，明显更接近 z-based CI。若表中确实是 z-based CI，应明确写成“normal-approximation CI”，不能直接称为小样本 95% CI。
+
+对于 n=4，建议：
+
+- 使用 t-based CI；
+- 同时报告逐 seed 数据；
+- 对 paired 差值使用配对置换检验或精确符号检验作为稳健性分析；
+- 不要把小样本 p 值表述成很强的总体性结论。
+
+#### 3. “随机衰减具有明确正则化收益”仍缺少 D-A 的正式显著性检验
+
+文档现在认为：
+
+- D-A ≈ +0.82，是正则化贡献；
+- F-D ≈ +0.18，且 p=0.33，不显著；
+- 因此 F 的收益主要来自正则化。
+
+这个方向是合理的，但证据还不够完整，因为 §13 没有给出 D-A 的 paired 检验，也没有给出 C-A 的检验。
+
+目前最多可以说：
+
+> D 的点估计增益较大，而 F 相对 D 的附加增益未达到显著。
+
+还不能完全说：
+
+> 正则化贡献已被统计确认，并且占据主要收益。
+
+应补充：
+
+- D-A 的 paired 检验；
+- C-A 的检验或等效性分析；
+- F-A、D-A、F-D 的置信区间；
+- 对“主要来自”的定量定义，例如贡献比例及其不确定性。
+
+#### 4. “5 组 × 4 seeds”不能外推成整个实验体系都具备四种子证据
+
+四种子主要集中在 walking_xyz。其他重要结论仍然较弱：
+
+- F 跨三个动态序列的结果看起来主要是单 seed；
+- held-out 结果是 A/F 的单次配置；
+- fr1_desk 的静态结果发生重复不一致；
+- fr2_xyz 门控误触发的统计基础不清楚；
+- Bonn balloon 的 GT mask 对应性不是四种子证据。
+
+因此，证据链可以支持“在 walking_xyz、该配置下的机制审计结论”，但还不能支持“该机制在动态序列上普遍成立”。
+
+#### 5. 静态负对照目前暴露了新问题，而不是完成了验证
+
+fr1_desk 同配置两次相差约 2 dB，这首先是可复现性故障。它使得以下结论暂时不可稳定解释：
+
+- F 在静态场景会退化；
+- 门控可以消除静态误伤；
+- GS-ROD 在静态序列上具有安全性。
+
+fr2_xyz 上门控误触发则说明阈值 2% 并非可靠的动态判别规则。换言之，门控目前不是已验证的解决方案，而是一个尚未完成的补救机制。
+
+所以 §11 的“最终方法形态”表述过强，更准确的说法应是：
+
+> 当前提出了一个带序列级门控的候选实现，但门控阈值的泛化性和误触发风险尚未充分验证。
+
+## 2. 负结果定位是否比原机制故事更可辩护
+
+是，而且明显更可辩护。
+
+原机制故事的问题是把“效果提升”直接归因于“残差能够识别动态高斯”。现有结果已经显示：
+
+- 随机高斯选择 D 也有明显提升；
+- F-D 的附加差异仅为 +0.18 dB，p=0.33；
+- GT 动态 mask precision 虽然高于随机先验，但绝对 precision 只有 7.9%，远不能称为动态高斯识别器；
+- 静态场景存在误伤和门控误触发。
+
+因此，当前更稳健的定位应当是：
+
+> 一项针对残差引导动态抑制机制的对照审计，揭示了 opacity 衰减正则化与残差归因选择性之间的混淆，并展示了随机选择对照、静态负对照和门控敏感性在评估此类方法时的必要性。
+
+这比“提出了有效的动态高斯识别机制”可靠得多。
+
+但“方法论警示”仍需避免过度泛化。当前证据能够支撑：
+
+- 在该组件化单目动态 3DGS 管线中，省略随机选择对照会造成机制归因风险；
+- 在该实验设置中，残差归因附加收益未被证实。
+
+当前证据尚不能充分支撑：
+
+- 所有选择性动态抑制方法都必须采用同样的评估协议；
+- 残差归因在一般情况下没有价值；
+- 正则化是该领域中此类方法提升的普遍主因。
+
+建议使用“case-study-based methodological warning”或“评估协议层面的风险提示”，而不是“领域级定论”。
+
+## 3. 终轮评分与建议
+
+### 评分：5.5/10
+
+分项判断如下：
+
+- 问题意识与诚实性：7/10  
+  能够主动推翻旧结论，并保留负结果，这是明显优点。
+
+- 实验设计：6/10  
+  A-F 矩阵、随机对照、像素级对照、held-out 和静态负对照都很有价值。
+
+- 统计严谨性：4/10  
+  paired 统计存在 F-D 内部不一致，CI 标注疑似错误，关键 D-A 检验缺失。
+
+- 可复现性：4/10  
+  fr1_desk 的重复运行差异约 2 dB，是明显红旗。
+
+- 机制结论强度：5/10  
+  现有数据支持“归因附加收益未证实”，但不足以支持更普遍的机制判断。
+
+- 论文贡献与新颖性：5/10  
+  方法本身的正向新颖性已明显下降，贡献主要转向机制审计和评估协议。
+
+### 建议
+
+当前建议：
+
+> 大修后重投，当前版本不建议接收。
+
+如果必须对应会议评分，更接近：
+
+> Borderline Reject / Weak Reject
+
+而不是明确 Reject。原因是研究问题并非没有价值，负结果也不是失败，而是统计和范围边界尚未达到可以放心发表的程度。
+
+## 4. 是否足以支撑 CCF-C/ICRA 级别论文
+
+以当前材料，尚不足够。
+
+它有潜力成为 CCF-C 或 ICRA 级别论文，但需要把“单一场景下的消融纠错”提升为“可复现、跨场景、可推广的机制审计与评估协议研究”。
+
+### 当前最缺的内容
+
+#### 1. 修复所有统计和数据一致性问题
+
+这是接收前置条件，不是可选增强项：
+
+- 重新核对 F-D 四个 paired 差值；
+- 统一 §10、§12、§13 的所有均值；
+- 使用正确的小样本 CI；
+- 补充 D-A、C-A 的正式检验；
+- 报告原始 per-seed 数据和完整统计脚本。
+
+#### 2. 增加跨序列、跨场景的完整矩阵
+
+至少应在多个动态和静态序列上重复：
+
+- A、C、D、E、F；
+- 关键情况下的 gate on/off；
+- 多种子或至少明确的重复次数。
+
+现在只有 walking_xyz 具备较完整的 4-seed 证据，无法支撑跨序列方法论结论。
+
+#### 3. 完成 gate ablation 和阈值敏感性
+
+这是当前论文定位中的核心缺口。至少需要：
+
+- 无门控；
+- 门控；
+- 不同阈值；
+- 动态场景、静态场景、弱动态场景；
+- 误触发率、漏触发率、性能变化。
+
+尤其是 fr2_xyz 已经证明 2% 阈值会误触发，因此不能把门控写成已经解决问题。
+
+#### 4. 解决 fr1_desk 不可复现性
+
+需要明确：
+
+- 随机源是否全部固定；
+- CUDA、cuDNN、排序、原子操作是否引入非确定性；
+- 高斯初始化、帧采样、优化器状态是否一致；
+- 两次运行的逐阶段指标；
+- 是否存在异常退出、缓存或数据读取差异。
+
+在这个问题解决前，静态负结果不能作为稳定结论。
+
+#### 5. 加入外部基线和统一协议比较
+
+文档自身已经列出 WildGS-SLAM / Gassidy，但尚未完成。若要投 ICRA 或 CCF-C，至少需要：
+
+- 与相关动态 3DGS/SLAM 方法比较；
+- 明确是否使用 GT pose、PnP、pose refinement；
+- 统一训练帧、迭代数、分辨率、硬件和评价指标；
+- 报告运行时间、显存、Gaussian 数量和额外开销。
+
+否则“方法论警示”会被认为只是在自有管线内部成立。
+
+#### 6. 将“机制研究”与“方法贡献”分开写
+
+当前论文不应继续把 GS-ROD 包装成已验证的动态识别机制。更可信的结构是：
+
+1. 提出一个可复现实验框架；
+2. 分解 opacity 衰减的正则化效应与残差归因效应；
+3. 发现随机选择对照会显著改变机制解释；
+4. 展示静态误伤与门控误触发；
+5. 提出一个尚待进一步验证的门控策略。
+
+如果继续使用“残差引导选择性衰减有效”作为主标题，正文负结果会与标题形成张力。
+
+## 最终审稿判断
+
+P0 的主要实验工作已经完成，且作者对错误机制叙事进行了必要的收缩，这是本轮最大的进步。但目前还不能称为“统计闭合”，因为 F-D 的 paired 结果在文档内部不一致，95% CI 的定义疑似错误，D-A 的显著性未报告，静态场景又暴露出不可复现和门控误触发问题。
+
+负结果定位是正确方向，甚至比原机制故事更有发表潜力。但现阶段它支撑的是：
+
+> “一个具有警示价值的单管线机制审计案例”
+
+而不是：
+
+> “已经证实的通用评估协议或普遍机制结论”。
+
+若修复统计矛盾，完成 gate/τ 敏感性，扩大跨序列验证，解决静态复现性，并加入外部基线，论文有机会达到 CCF-C/ICRA 的边缘接收线。以当前版本，建议大修后重投。
