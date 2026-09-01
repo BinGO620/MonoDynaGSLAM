@@ -215,6 +215,30 @@ def main():
         s = (rends.squeeze(0)[i].clamp(0, 1).cpu().numpy() * 255).astype(np.uint8)  # (H,W,3)
         cv2.imwrite(str(out_dir / f"render_{j}.png"), cv2.cvtColor(s, cv2.COLOR_RGB2BGR))
 
+    # 导出估计位姿（TUM 格式）用于 ATE 评估
+    pose_est = viewmats_param.detach().squeeze(0).cpu().numpy()  # (N,4,4) w2c
+    pose_lines = []
+    for i in range(n_frames):
+        c2w = np.linalg.inv(pose_est[i])
+        q = c2w[:3, :3]; tx, ty, tz = c2w[:3, 3]
+        trace = np.trace(q)
+        if trace > 0:
+            s = 0.5 / np.sqrt(trace + 1.0)
+            qw = 0.25 / s; qx = (q[2,1]-q[1,2])*s; qy = (q[0,2]-q[2,0])*s; qz = (q[1,0]-q[0,1])*s
+        else:
+            if q[0,0]>q[1,1] and q[0,0]>q[2,2]:
+                s = 2.0*np.sqrt(1.0+q[0,0]-q[1,1]-q[2,2])
+                qw = (q[2,1]-q[1,2])/s; qx = 0.25*s; qy = (q[0,1]+q[1,0])/s; qz = (q[0,2]+q[2,0])/s
+            elif q[1,1]>q[2,2]:
+                s = 2.0*np.sqrt(1.0+q[1,1]-q[0,0]-q[2,2])
+                qw = (q[0,2]-q[2,0])/s; qx = (q[0,1]+q[1,0])/s; qy = 0.25*s; qz = (q[1,2]+q[2,1])/s
+            else:
+                s = 2.0*np.sqrt(1.0+q[2,2]-q[0,0]-q[1,1])
+                qw = (q[1,0]-q[0,1])/s; qx = (q[0,2]+q[2,0])/s; qy = (q[1,2]+q[2,1])/s; qz = 0.25*s
+        ts = meta["timestamps"][i]
+        pose_lines.append(f"{ts} {tx} {ty} {tz} {qx} {qy} {qz} {qw}")
+    (out_dir / "estimated_trajectory.txt").write_text("# timestamp tx ty tz qx qy qz qw\n" + "\n".join(pose_lines))
+
     summary = {
         "seq": seq_dir.name, "n_frames": n_frames, "res": W,
         "n_gauss": n_gauss, "iters": args.iters,

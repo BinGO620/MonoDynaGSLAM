@@ -36,6 +36,16 @@
 | per-frame v2 (5% dyn) | 24.24 dB | per-frame 交替优化 |
 | per-frame v1 (5% dyn) | 23.64 dB | per-frame 原始版 |
 
+## ATE 评估结果
+
+| 序列 | 模式 | PSNR | ATE RMSE | 匹配帧 | 位姿方案 |
+|---|---|---|---|---|---|
+| fr1_desk（静态）| Step 1 baseline | 24.43 dB | 1.38 cm | — | GT init + 位姿微调 |
+| fr3_walking（动态）| Step 2 Gaussian anti | 24.6 dB | **1.52 cm** | 159 | GT init + 位姿微调 |
+| fr3_walking（动态）| Step 2 baseline | 24.0 dB | 估计类似范围 | — | GT init + 位姿微调 |
+
+> 注：当前所有实验用 GT pose 做初始化 + 微调（不是真实 SLAM 从零估计），ATE = 1.5 cm 说明位姿优化通道稳定。下一步需测试 DROID 初始化的 ATE 退化。
+
 ## 关键发现
 
 1. **Gaussian 级 anti 是目前最优 anti 机制**：在 Gaussian 层面操作（opacity 下调），而不是帧层面（loss 降权）。后者证伪，前者在两个序列上验证。

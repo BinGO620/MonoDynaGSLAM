@@ -183,6 +183,32 @@ def main():
             rends.squeeze(0)[i].permute(2,0,1), images[i]).item()+1e-8), 2)
             for i in range(n_frames)]
 
+    # 保存优化后的位姿（w2c）用于 ATE 评估
+    pose_est = viewmats_param.detach().squeeze(0).cpu().numpy()  # (N,4,4) w2c
+    pose_est_list = []
+    for i in range(n_frames):
+        c2w = np.linalg.inv(pose_est[i])
+        ts = float(meta["timestamps"][i])
+        q = c2w[:3, :3]
+        # 转四元数（Hamilton 约定，与 TUM 一致）
+        trace = np.trace(q)
+        if trace > 0:
+            s = 0.5 / np.sqrt(trace + 1.0)
+            w = 0.25 / s; x = (q[2,1]-q[1,2])*s; y = (q[0,2]-q[2,0])*s; z = (q[1,0]-q[0,1])*s
+        else:
+            if q[0,0]>q[1,1] and q[0,0]>q[2,2]:
+                s = 2.0*np.sqrt(1.0+q[0,0]-q[1,1]-q[2,2])
+                w = (q[2,1]-q[1,2])/s; x = 0.25*s; y = (q[0,1]+q[1,0])/s; z = (q[0,2]+q[2,0])/s
+            elif q[1,1]>q[2,2]:
+                s = 2.0*np.sqrt(1.0+q[1,1]-q[0,0]-q[2,2])
+                w = (q[0,2]-q[2,0])/s; x = (q[0,1]+q[1,0])/s; y = 0.25*s; z = (q[1,2]+q[2,1])/s
+            else:
+                s = 2.0*np.sqrt(1.0+q[2,2]-q[0,0]-q[1,1])
+                w = (q[1,0]-q[0,1])/s; x = (q[0,2]+q[2,0])/s; y = (q[1,2]+q[2,1])/s; z = 0.25*s
+        pose_est_list.append(f"{ts} {c2w[0,3]} {c2w[1,3]} {c2w[2,3]} {x} {y} {z} {w}")
+    pose_path = out_dir / "estimated_trajectory.txt"
+    pose_path.write_text("# timestamp tx ty tz qx qy qz qw\n" + "\n".join(pose_est_list))
+
     step = max(1, n_frames//6)
     for j, i in enumerate(range(0, n_frames, step)):
         s = (rends.squeeze(0)[i].clamp(0,1).cpu().numpy()*255).astype(np.uint8)
