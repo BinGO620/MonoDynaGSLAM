@@ -59,3 +59,29 @@ H3：再生机制恢复被动态遮挡的背景（动态区 PSNR 提升的主要
 - 风险：生命周期调度（K 值、证据阈值）引入新超参——需要类似 τ 的敏感性分析纪律；
 - 风险：TAD-GS 作者或他人可能已在做在线版——投稿前需再查新；
 - 备选方向（若 H1-H3 证伪）：几何基础模型前端（VGGT）替换 PnP+Metric3D，解决位姿-外观退化（工程升级，novelty 弱但稳定）。
+
+## 5. Phase 0 执行记录（2026-09-02）与载体修正
+
+### 5.1 自建递增框架的教训
+lifecycle_incremental.py（递增式训练 + 候选池）跑通但地图质量天花板 10 dB（全帧管线 24.7）：
+- 修复轨迹：颜色归一化 bug → scales 可优化 + 窗口联合优化 → 致密化提速，6→10 dB；
+- 剩余差距需重写完整 3DGS 致密化体系（clone&split / opacity reset / 多分辨率）——
+  **这不是机制自检，是造轮子**。按三阶段纪律停止。
+
+### 5.2 正确载体发现：monogs-ours deferred_commit.py（661 行）
+- **三臂生命周期消融已实现**：`lifecycle_mode ∈ {immediate, prune, deferred}`——
+  immediate=vanilla 对照、prune=insert-then-remove 对照、deferred=ours（延迟提交）；
+- 对称证据 C± 计数、lineage allocator、static evidence、reliability 确认通道；
+- arms 间唯一 allowed_config_diff 的复现纪律。
+- **codex 建议的三臂拆分在资产中已存在**；EXP51-54 已有 RGB-D 消融数据。
+
+### 5.3 修正后的验证路径
+1. **H1/H2 的正确载体**：monogs-ours 三臂框架（RGB-D 成熟环境）跑 ghosting 量化
+   （Bonn GT mask：deferred vs immediate vs prune 的地图污染率）——直接复用；
+2. **MonoDynaGSLAM 的贡献点**：单目 evidence 信号（多帧渲染一致性，已实现+已审计）
+   替换 RGB-D 可靠性信号接入三臂框架 = 单目 lifecycle（G1 + G3 的交汇）；
+3. codex 的闭环退化警告（位姿误差污染 evidence）作为设计约束纳入。
+
+### 5.4 三方综合结论（codex 意见 + 独立验证 + 项目资产）
+方向成立但 gap 需收窄（"在线单目"→"单目 evidence 驱动的 lifecycle 三臂对照"）；
+Phase 0 教训确认了 codex 的"先窄后宽"建议；载体从自建框架修正为 monogs-ours。
