@@ -65,6 +65,7 @@ def main():
     ap.add_argument("--anti_period", type=int, default=200)
     ap.add_argument("--stride", type=int, default=1, help="训练帧间隔，>1 时评估全部帧")
     ap.add_argument("--seed", type=int, default=42)
+    ap.add_argument("--gate_thresh", type=float, default=0.02)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
     out_dir = Path(args.out); out_dir.mkdir(parents=True, exist_ok=True)
@@ -72,6 +73,8 @@ def main():
     t0 = time.time()
     torch.manual_seed(args.seed)
     np.random.seed(args.seed)
+    torch.backends.cudnn.deterministic = True
+    torch.backends.cudnn.benchmark = False
     device = "cuda"
     meta = json.loads((Path(args.prior) / "meta.json").read_text())
     depths = np.load(Path(args.prior) / "depths.npy")
@@ -187,7 +190,7 @@ def main():
             for fi in range(n_frames):
                 med = residual[fi].median(); std = residual[fi].std() + 1e-8
                 dfs.append((residual[fi] > med + args.tau * std).float().mean().item())
-            if float(np.median(dfs)) < 0.02:
+            if float(np.median(dfs)) < args.gate_thresh:
                 return 0  # 静态场景，跳过
         selected = selective_gaussian_mask()
         if len(selected) == 0: return 0
