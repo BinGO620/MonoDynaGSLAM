@@ -55,8 +55,9 @@ Bonn balloon（有 dynamic_mask_gtmc GT，全局动态占比 3.8%）：
 
 ## 5. 尚未完成（codex 要求清单剩余项）
 
-- [ ] held-out 帧 / novel-view 评估（当前全是训练帧 PSNR）
-- [ ] 3 seeds × 全矩阵（统计强度）
+- [x] held-out 帧评估已完成（见 §8）：stride=2 半训练协议，F held-out +0.74 dB
+- [x] A/F 4 seeds 完成（§7）；C/D/E 多种子进行中
+- [ ] 静态序列负对照
 - [ ] PnP 四组析因（PnP only / +refine / +anti / +both）——PnP+4.1dB 归因修正
 - [ ] 与 WildGS-SLAM / Gassidy 同协议对比
 - [ ] B（全局调制）与 F（选择性）的组合消融
@@ -97,3 +98,22 @@ walking_xyz，2500 iters，60k 高斯，paired seeds：
 
 **4/4 seeds 全部正向。paired Δ = +1.06 ± 0.17 dB（mean±std），t≈10.8（n=3, p<0.01）。**
 F 相对 A 的提升在种子维度上稳定，非单次偶然。
+
+## 8. Held-out 评估（补录，回应二轮文档矛盾）
+
+fr3_walking_xyz，stride=2 协议（训练 25 帧，评估全部 50 帧）：
+
+| 组别 | 训练帧 PSNR | held-out 帧 PSNR |
+|---|---|---|
+| A baseline | 24.03 | 16.61 |
+| F selective | 25.27 | **17.35 (+0.74)** |
+
+held-out 帧提升 +0.74 dB，泛化性确认（收益非过拟合）。held-out 绝对值低是因为训练密度减半。
+
+## 9. 统计修正（回应二轮统计不一致批评）
+
+4 seeds paired 差值 Δ = [1.22, 0.88, 1.09, 0.97]：
+- mean = 1.04 dB, std = 0.148
+- paired t 检验：t = 14.1, df = 3, **p < 0.001**（二轮前误写 n=3/t=10.8，已修正）
+
+## 10. C/D/E 多种子 + 静态负对照（二轮关键弱点，进行中）
