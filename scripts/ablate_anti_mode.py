@@ -56,7 +56,8 @@ def main():
     ap.add_argument("--prior", required=True)
     ap.add_argument("--seq_dir", default=None)
     ap.add_argument("--mode", required=True,
-                    choices=["none", "global_residual", "random_decay", "pixel_mask"])
+                    choices=["none", "global_residual", "random_decay", "pixel_mask",
+                             "selective", "random_gauss"])
     ap.add_argument("--res", type=int, default=320)
     ap.add_argument("--iters", type=int, default=2500)
     ap.add_argument("--max_points", type=int, default=60000)
@@ -127,6 +128,67 @@ def main():
     from gsplat import rasterization
 
     @torch.no_grad()
+    def project_gaussians_to_pixels(viewmats):
+        """把高斯中心投影到每帧像素坐标，返回像素坐标 (N,n_g) 与有效深度掩码 (N,n_g)。"""
+        mw = means.squeeze(0)  # (n_g,3)
+        ones = torch.ones(n_g, 1, device=device)
+        mw_h = torch.cat([mw, ones], dim=1)  # (n_g,4)
+        vm = viewmats.squeeze(0)  # (N,4,4)
+        cam_pts = torch.einsum("nij,gj->ngi", vm, mw_h)  # (N, n_g, 4)
+        depth = cam_pts[..., 2]  # (N, n_g)
+        valid = depth > 0.05
+        fx_, fy_ = K[0, 0].item(), K[1, 1].item()
+        cx_, cy_ = K[0, 2].item(), K[1, 2].item()
+        u = fx_ * cam_pts[..., 0] / depth.clamp(min=1e-6) + cx_
+        v = fy_ * cam_pts[..., 1] / depth.clamp(min=1e-6) + cy_
+        return u, v, valid
+
+    @torch.no_grad()
+    def selective_gaussian_mask():
+        """F/D 共用：残差归因选择高斯。返回被选中的高斯索引列表。"""
+        rends, _, _ = rasterization(means, quats, scales, opacities.detach(), colors,
+                                    viewmats_param.detach(), Ks, W, H)
+        residual = (rends.squeeze(0).permute(0, 3, 1, 2) - images).abs().mean(dim=1)  # (N,H,W)
+        # 全局归一化的残差阈值（每帧 median+tau*std 的中位数，保证跨帧一致）
+        threshs = []
+        for fi in range(n_frames):
+            med = residual[fi].median(); std = residual[fi].std() + 1e-8
+            threshs.append(med + args.tau * std)
+        thr_global = torch.tensor(threshs, device=device).median()
+        u, v, valid = project_gaussians_to_pixels(viewmats_param.detach())
+        # 采样残差：线性索引 gather（低显存）
+        u_c = u.clamp(0, W - 1).long()
+        v_c = v.clamp(0, H - 1).long()
+        flat = residual.view(n_frames, -1)  # (N, H*W)
+        lin = v_c * W + u_c  # (N, n_g)
+        res_at_g = flat.gather(1, lin)  # (N, n_g)
+        dyn_obs = (res_at_g > thr_global) & valid  # (N, n_g) 该高斯在有效深度下落在高残差像素
+        # 聚合跨帧：出现在高残差像素的帧占比 > 50% 的帧数
+        dyn_frame_count = dyn_obs.float().sum(dim=0)  # (n_g,)
+        # 选择标准：高斯至少在 3 帧中被观察到高残差，且观察帧数 > 0
+        observed = valid.float().sum(dim=0)  # (n_g,) 有效观察帧数
+        selected = ((dyn_frame_count >= 3) & (observed > 5)).nonzero(as_tuple=True)[0]
+        return selected
+
+    @torch.no_grad()
+    def anti_update_selective():
+        """F: 真正的 selective Gaussian anti（投影归因 + 逐高斯衰减）。"""
+        selected = selective_gaussian_mask()
+        if len(selected) == 0: return
+        opacities.data.view(n_g)[selected] *= 0.9  # 每个被选中高斯独立衰减
+        return len(selected)
+
+    @torch.no_grad()
+    def anti_update_random_gauss():
+        """D: 随机选择与 F 相同数量的高斯衰减。"""
+        selected_true = selective_gaussian_mask()
+        k = len(selected_true)
+        if k == 0: return 0
+        rand_idx = torch.randperm(n_g, device=device)[:k]
+        opacities.data.view(n_g)[rand_idx] *= 0.9
+        return k
+
+    @torch.no_grad()
     def anti_update_global_residual():
         """当前实现：帧级动态比例 → 全局 opacity 衰减。"""
         rends, _, _ = rasterization(means, quats, scales, opacities.detach(), colors,
@@ -166,6 +228,11 @@ def main():
                 anti_update_global_residual()
             elif args.mode == "random_decay":
                 anti_update_random_decay()
+            elif args.mode == "selective":
+                n_sel = anti_update_selective()
+                if it % 500 == 0: print(f"    [selective] {n_sel} gaussians suppressed")
+            elif args.mode == "random_gauss":
+                n_sel = anti_update_random_gauss()
 
         opt.zero_grad()
         rends, _, _ = rasterization(means, quats, scales, opacities, colors,
