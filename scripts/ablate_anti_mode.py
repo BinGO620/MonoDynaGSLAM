@@ -57,12 +57,13 @@ def main():
     ap.add_argument("--seq_dir", default=None)
     ap.add_argument("--mode", required=True,
                     choices=["none", "global_residual", "random_decay", "pixel_mask",
-                             "selective", "random_gauss"])
+                             "selective", "random_gauss", "combined"])
     ap.add_argument("--res", type=int, default=320)
     ap.add_argument("--iters", type=int, default=2500)
     ap.add_argument("--max_points", type=int, default=60000)
     ap.add_argument("--tau", type=float, default=2.5)
     ap.add_argument("--anti_period", type=int, default=200)
+    ap.add_argument("--stride", type=int, default=1, help="训练帧间隔，>1 时评估全部帧")
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
     out_dir = Path(args.out); out_dir.mkdir(parents=True, exist_ok=True)
@@ -220,6 +221,9 @@ def main():
         {"params": [viewmats_param], "lr": 5e-5},
     ])
 
+    train_frames = list(range(0, n_frames, args.stride))
+    if args.stride > 1:
+        print(f"HOLD-OUT 协议: 训练 {len(train_frames)}/{n_frames} 帧 (stride={args.stride})")
     print(f"mode={args.mode} | 高斯 {n_g} | 帧 {n_frames} | tau {args.tau}")
     for it in range(args.iters):
         do_anti = (args.mode != "none" and it > 0 and it % args.anti_period == 0)
@@ -231,6 +235,10 @@ def main():
             elif args.mode == "selective":
                 n_sel = anti_update_selective()
                 if it % 500 == 0: print(f"    [selective] {n_sel} gaussians suppressed")
+            elif args.mode == "combined":
+                anti_update_global_residual()
+                n_sel = anti_update_selective()
+                if it % 500 == 0: print(f"    [combined] {n_sel} selective + global")
             elif args.mode == "random_gauss":
                 n_sel = anti_update_random_gauss()
 
@@ -239,20 +247,23 @@ def main():
                                     viewmats_param, Ks, W, H)
         imgs_pred = rends.squeeze(0).permute(0,3,1,2)
 
-        if args.mode == "pixel_mask" and do_anti:
+        if args.stride > 1:
+            tidx = torch.tensor(train_frames, device=device)
+            loss = torch.nn.functional.mse_loss(imgs_pred[tidx], images[tidx])
+        elif args.mode == "pixel_mask" and do_anti:
             # 对照A：高残差像素 mask 掉（在 anti_update 时机生成 mask，持续到下个周期）
             with torch.no_grad():
                 residual = (imgs_pred - images).abs().mean(dim=1)  # (N,H,W)
                 med = residual.median(); std = residual.std() + 1e-8
                 mask = (residual <= med + args.tau * std).float().unsqueeze(1)  # (N,1,H,W)
-        elif args.mode == "pixel_mask":
-            mask = getattr(main, "_pixel_mask", None)
-        else:
-            mask = None
-
-        if mask is not None:
             main._pixel_mask = mask
             loss = (torch.nn.functional.mse_loss(imgs_pred, images, reduction='none').mean(dim=1, keepdim=True) * mask).mean()
+        elif args.mode == "pixel_mask":
+            mask = getattr(main, "_pixel_mask", None)
+            if mask is not None:
+                loss = (torch.nn.functional.mse_loss(imgs_pred, images, reduction='none').mean(dim=1, keepdim=True) * mask).mean()
+            else:
+                loss = torch.nn.functional.mse_loss(imgs_pred, images)
         else:
             loss = torch.nn.functional.mse_loss(imgs_pred, images)
 

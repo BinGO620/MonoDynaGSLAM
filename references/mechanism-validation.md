@@ -61,3 +61,25 @@ Bonn balloon（有 dynamic_mask_gtmc GT，全局动态占比 3.8%）：
 - [ ] 与 WildGS-SLAM / Gassidy 同协议对比
 - [ ] B（全局调制）与 F（选择性）的组合消融
 - [ ] τ 自动选择
+
+## 6. PnP 四组析因（回应 R1-M2，2026-09-01 补充）
+
+walking_xyz，PnP init（ATE=6.0cm），60k 高斯，2500 iters：
+
+| 组合 | PSNR | ATE | Δ vs PnP only |
+|---|---|---|---|
+| PnP only | 16.2 dB | 6.0 cm | — |
+| PnP + refine（位姿微调） | 19.0 dB | 6.1 cm | **+2.8** |
+| PnP + anti（无 refine） | 16.3 dB | 6.0 cm | **+0.1** |
+| PnP + refine + anti | 20.3 dB | 6.6 cm | +4.1 |
+
+### 修正后的结论
+
+1. **原声称"非 GT 初始化下 anti 提升更大（+4.1 dB）"是归因错误**——refine 贡献 2.8 dB，anti 单独仅 0.1 dB，协同 +1.2 dB；
+2. **anti 单独在位姿不准时几乎无效**：位姿误差淹没渲染残差信号；
+3. GT init 下 anti 的 +1.4 dB 仍然成立（位姿准 → 残差信号可用）；
+4. 存在 **refine × anti 协同效应**（+1.2 dB 交互项），机制待解释（可能：refine 后残差信号变干净，anti 才能正确归因）。
+
+### 修正后的机制边界声明
+
+> 残差引导的选择性 opacity 衰减的有效性**以位姿质量为前提**。GT/精调位姿下 +0.8~1.4 dB；粗糙位姿下单独使用无效，需与位姿优化协同（+1.2 dB 交互）。
