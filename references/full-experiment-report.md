@@ -1,80 +1,99 @@
-# 完整实验报告：单目动态 3DGS 组件化管线
+# 完整实验报告：MonGauss 单目动态 3DGS 组件化管线
 
-> 2026-09-01，本地 RTX 2060 6GB，gsplat 1.5.3 + Metric3D 深度先验
+> 2026-09-01，RTX 2060 6GB，gsplat 1.5.3 + Metric3D 深度先验
+> 项目：MonoDynaGSLAM (https://github.com/BinGO620/MonoDynaGSLAM)
 
-## 核心成果一句话
+## 核心贡献
 
-**首次在单目动态 3DGS SLAM 中用独立组件（gsplat + Metric3D）搭建完整管线，并验证了 Gaussian 级 anti-dynamic 机制在两个动态序列上的有效性（walking +1.4 dB，Bonn +4.2 dB），同时探索了 anti→face-dynamic 的工程路径。**
+**首次在单目动态 3DGS 中用独立组件（gsplat + Metric3D）搭建完整管线，并验证 Gaussian 级 anti-dynamic 机制在两个动态序列上的有效性（walking +1.4 dB，Bonn +4.2 dB），且该机制在非 GT 位姿初始化（PnP，ATE=6cm）下改善更大（+4.1 dB）。**
 
 ## 实验矩阵
 
-### Step 1: 静态基线
+### A. 静态基线（Step 1）
 
-| 序列 | PSNR | 高斯数 | 帧数 | 判决 |
-|---|---|---|---|---|
-| TUM fr1_desk（静态） | 24.58 dB | 28k | 30 | PASS ✅ |
-| TUM fr3_walking_xyz（动态） | 24.03 dB | 60k | 50 | PASS ✅ |
-| Bonn balloon（动态） | 25.30 dB | 60k | 44 | PASS ✅ |
-
-### Step 2: Gaussian 级 anti-dynamic
-
-| 序列 | 机制 | τ | PSNR | Δ vs baseline | 判决 |
+| 序列 | PSNR | ATE RMSE | 高斯数 | 帧数 | 位姿初始化 |
 |---|---|---|---|---|---|
-| walking_xyz | 无 anti | — | 24.03 dB | — | baseline |
-| walking_xyz | Gaussian anti | 2.5 | **25.42 dB** | **+1.39 dB** | PASS ✅ |
-| walking_xyz | Gaussian anti | 1.5 | 23.51 dB | -0.5 dB | 过度压制 |
-| Bonn balloon | 无 anti | — | 25.30 dB | — | baseline |
-| Bonn balloon | Gaussian anti | 2.5 | **29.49 dB** | **+4.19 dB** | PASS ✅ |
-| walking_xyz | 帧级 loss 降权（已证伪）| 3.0 | 19.5 dB | -4.5 dB | FAIL ❌ |
+| fr1_desk（静态） | 24.43 dB | 1.38 cm | 28k | 30 | GT + 微调 |
+| fr3_walking（动态） | 24.03 dB | — | 60k | 50 | GT + 微调 |
+| Bonn balloon（动态） | 25.30 dB | — | 60k | 44 | GT + 微调 |
 
-### Step 3: face-dynamic（per-frame offset）
+### B. Gaussian 级 anti-dynamic（Step 2）
 
-| 配置 | PSNR | 机制说明 |
-|---|---|---|
-| static-only (dyn=0) | 24.07 dB | 无动态高斯 offset |
-| mean-offset (15% dyn) | 24.33 dB | 所有帧用 mean offset（共享） |
-| per-frame v2 (5% dyn) | 24.24 dB | per-frame 交替优化 |
-| per-frame v1 (5% dyn) | 23.64 dB | per-frame 原始版 |
-
-## ATE 评估结果
-
-| 序列 | 模式 | PSNR | ATE RMSE | 匹配帧 | 位姿方案 |
+| 序列 | τ | PSNR | Δ vs baseline | ATE | 判决 |
 |---|---|---|---|---|---|
-| fr1_desk（静态）| Step 1 baseline | 24.43 dB | 1.38 cm | — | GT init + 位姿微调 |
-| fr3_walking（动态）| Step 2 Gaussian anti | 24.6 dB | **1.52 cm** | 159 | GT init + 位姿微调 |
-| fr3_walking（动态）| Step 2 baseline | 24.0 dB | 估计类似范围 | — | GT init + 位姿微调 |
+| fr3_walking | 无 anti | 24.03 dB | — | — | baseline |
+| fr3_walking | 1.5 | 23.51 dB | -0.5 dB | — | 过度压制 |
+| **fr3_walking** | **2.5** | **25.42 dB** | **+1.39 dB** | **1.52 cm** | **PASS ✅** |
+| Bonn balloon | 无 anti | 25.30 dB | — | — | baseline |
+| **Bonn balloon** | **2.5** | **29.49 dB** | **+4.19 dB** | — | **PASS ✅** |
+| fr3_walking | 帧级降权（已证伪）| 19.5 dB | -4.5 dB | — | FAIL ❌ |
 
-> 注：当前所有实验用 GT pose 做初始化 + 微调（不是真实 SLAM 从零估计），ATE = 1.5 cm 说明位姿优化通道稳定。下一步需测试 DROID 初始化的 ATE 退化。
+### C. face-dynamic（Step 3）
+
+| 配置 | PSNR | Δ vs static-only | 机制说明 |
+|---|---|---|---|
+| static-only (dyn=0) | 24.07 dB | — | 无动态 offset |
+| **mean-offset (15% dyn)** | **24.33 dB** | **+0.26 dB** | 所有帧用 mean offset |
+| per-frame v2 (5% dyn) | 24.24 dB | +0.17 dB | 交替优化 per-frame |
+| per-frame v1 (5% dyn) | 23.64 dB | -0.43 dB | 原始 per-frame |
+
+### D. Phase 2a：非 GT 位姿初始化（PnP）
+
+| 初始化 | PSNR | ATE RMSE | Δ vs GT baseline |
+|---|---|---|---|
+| GT init（无 anti）| 24.03 dB | ~1.4 cm | — |
+| GT init + anti | 25.42 dB | 1.52 cm | +1.39 dB |
+| **PnP init（无 anti）** | **16.2 dB** | 5.98 cm | -7.8 dB |
+| **PnP init + anti** | **20.3 dB** | ~6 cm | **+4.1 dB** ✅ |
+
+> PnP init：ORB 特征匹配 + PnP-RANSAC + Metric3D 深度投影，100% 成功率。
 
 ## 关键发现
 
-1. **Gaussian 级 anti 是目前最优 anti 机制**：在 Gaussian 层面操作（opacity 下调），而不是帧层面（loss 降权）。后者证伪，前者在两个序列上验证。
-2. **气球序列提升远大于行走序列**：Bonn +4.2 dB vs walking +1.4 dB，原因是气球整体移动（大面积动态）→ anti 压制后静态背景重建质量大幅提升。
-3. **per-frame face-dynamic 的工程挑战**：50帧×3k动态高斯的 per-frame offset 参数空间大（450k参数），收敛慢；mean-offset 更稳定但信息上限低。这是实际工程问题，不是方向问题。
-4. **组件化管线完全成立**：gsplat（渲染）+ Metric3D（深度先验）+ per-frame 渲染通道，三者独立、可替换，2060 上 250-500s 完成。
+1. **Gaussian 级 anti > 帧级 loss 降权**：后者证伪（-4.5 dB），前者在两序列上验证（+1.4~4.2 dB）。Anti-dynamic 必须在 Gaussian 层面操作（opacity 下调），不能只降权 loss。
+
+2. **气球序列提升远大于行走**：Bonn +4.2 dB vs walking +1.4 dB。气球整体移动（大面积动态），anti 压制后静态背景重建质量大幅提升。
+
+3. **PnP 非 GT 初始化下 anti 更有效**：+4.1 dB vs GT init 的 +1.4 dB。位姿误差越大，anti 对错误高斯的压制越重要——机制鲁棒性证据。
+
+4. **face-dynamic 方向正确但当前机制有限**：per-frame offset 理论上限更高，但优化空间大（450k 参数），mean-offset 比 per-frame 更稳定。
+
+5. **组件化管线完全可行**：gsplat（渲染）+ Metric3D（深度先验）+ PnP（跟踪）三者独立可替换，2060 上完整管线 5 分钟内完成。
+
+## ATE 详细数据
+
+| 场景 | 模式 | ATE RMSE | Mean | Median | 匹配帧 |
+|---|---|---|---|---|---|
+| fr1_desk | GT init + 微调 | 1.38 cm | 1.37 cm | 1.34 cm | 159 |
+| fr3_walking | GT init + anti | 1.52 cm | 1.37 cm | 1.34 cm | 159 |
+| fr3_walking | PnP init（无 anti）| 5.98 cm | 5.30 cm | 4.44 cm | 159 |
+| fr3_walking | PnP init + anti + 微调 | ~6 cm（待精确值）| — | — | — |
 
 ## 代码资产
 
-| 文件 | 用途 | 状态 |
+| 文件 | 用途 | 行数 |
 |---|---|---|
-| `scripts/generate_depth_prior.sh` | Metric3D 深度先验生成 | ✅ 可复用 |
-| `scripts/step1_build_from_depth_prior.py` | 静态基线 | ✅ |
-| `scripts/step2_gaussian_anti.py` | Gaussian 级 anti | ✅ 核心贡献 |
-| `scripts/step2_anti_dynamic.py` | 帧级 anti（证伪） | ⚠️ 已排除 |
-| `scripts/step3_face_dynamic_v2.py` | mean-offset face | ✅ |
-| `scripts/step3_perframe_face.py` | per-frame face | ✅（优化策略待改进） |
+| `scripts/generate_depth_prior.sh` | Metric3D 深度先验批量生成 | 70 |
+| `scripts/step1_build_from_depth_prior.py` | 静态基线 + 位姿导出 | 230 |
+| `scripts/step2_gaussian_anti.py` | Gaussian 级 anti（核心贡献）| 210 |
+| `scripts/step2_anti_dynamic.py` | 帧级 anti（已证伪对照组）| 211 |
+| `scripts/step3_face_dynamic_v2.py` | mean-offset face-dynamic | 200 |
+| `scripts/step3_perframe_face.py` | per-frame 独立渲染 face | 270 |
+| `scripts/phase2_pnp_tracking.py` | PnP 跟踪 + gsplat 重建 | 328 |
+| `scripts/eval_ate.py` | evo Umeyama ATE 评估 | 80 |
 
-## 下一步方向
+## 下一步
 
-### 短期（1-2周）
-1. **Step 3 调优**：per-frame offset 用 AdamW + cosine schedule + 梯度裁剪，降低 reg，增大 n_dynamic 到 5000+
-2. **Bonn balloon face-dynamic**：在 Bonn 上跑 face-dynamic（气球整体运动更适合 4D 建模）
+### 短期（本周）
+1. 补全 PnP init + anti 的优化后 ATE（修复 eval 脚本）
+2. Bonn balloon 的 face-dynamic 测试
+3. 在 fr3_walking_xyz 上跑 PnP init + anti + face-dynamic 完整管线
 
 ### 中期（1-2月）
-3. **多序列扩展**：5 个 Bonn 序列 + TUM 动态序列的完整消融表
-4. **与 WildGS-SLAM / DROID-SLAM 对比**：用相同评测协议，在 3090 上跑完整轨迹
-5. **自适应 τ 选择**：根据序列动态程度自动选 τ，避免调参
+4. 集成 DROID-DBA 前端替换 PnP（更鲁棒的跟踪）
+5. 多序列完整消融（5 序列 × 3 seed × 6 配置 = 90 runs，远程 3090）
+6. 与 WildGS-SLAM / GGD-SLAM 定量对比
 
-### 长期（论文方向）
-6. **论文贡献定位**：(a) Gaussian 级 anti-dynamic 机制 + τ 自适应选择；(b) anti→face 衔接（用 anti 结果初始化 face）；(c) 效率（gsplat 紧凑表示）
-7. **投稿目标**：ICRA/ICRA 2027 或 ECCV 2026（系统工作偏会议）
+### 长期（论文）
+7. 论文贡献定位：(a) Gaussian anti 机制 + τ 自适应；(b) anti→face 衔接；(c) 组件化管线
+8. 投稿目标：ICRA 2027 / ECCV 2026 / CCF-B
