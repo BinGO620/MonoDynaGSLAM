@@ -64,11 +64,14 @@ def main():
     ap.add_argument("--tau", type=float, default=2.5)
     ap.add_argument("--anti_period", type=int, default=200)
     ap.add_argument("--stride", type=int, default=1, help="训练帧间隔，>1 时评估全部帧")
+    ap.add_argument("--seed", type=int, default=42)
     ap.add_argument("--out", required=True)
     args = ap.parse_args()
     out_dir = Path(args.out); out_dir.mkdir(parents=True, exist_ok=True)
 
     t0 = time.time()
+    torch.manual_seed(args.seed)
+    np.random.seed(args.seed)
     device = "cuda"
     meta = json.loads((Path(args.prior) / "meta.json").read_text())
     depths = np.load(Path(args.prior) / "depths.npy")
