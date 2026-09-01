@@ -225,7 +225,7 @@ def main():
     print(f"\ngsplat 重建（用 PnP 位姿初始化）...")
     Ks = torch.from_numpy(K).float().to(device).unsqueeze(0).expand(1, n_frames, 3, 3).contiguous()
     poses_pnp = torch.tensor(np.array(pnp_poses), dtype=torch.float32).to(device)
-    viewmats_pnp = poses_pnp.inverse().unsqueeze(0)
+    viewmats_pnp = poses_pnp.inverse().unsqueeze(0).to(device)
 
     # 多帧反投影点云
     all_pts, all_cols = [], []
