@@ -1,0 +1,850 @@
+Reading additional input from stdin...
+2026-09-01T15:33:42.220002Z ERROR codex_core::session::session: failed to load skill /home/cb/.cc-switch/skills/3dgs-experiment-planner/SKILL.md: missing YAML frontmatter delimited by ---
+2026-09-01T15:33:42.220114Z ERROR codex_core::session::session: failed to load skill /home/cb/.cc-switch/skills/3dgs-paper-reader/SKILL.md: missing YAML frontmatter delimited by ---
+OpenAI Codex v0.149.1
+--------
+workdir: /data/MonoDynaGSLAM
+model: gpt-5.6-sol
+provider: custom
+approval: never
+sandbox: danger-full-access
+reasoning effort: medium
+reasoning summaries: none
+session id: 01a05d9a-cb4b-7f21-8b3e-ea902b3a1a55
+--------
+user
+你是三个不同的 CVPR/ICRA 审稿人（R1 严格方法学、R2 实验严谨性、R3 动态SLAM领域专家）。请阅读 docs/review/codex-review-input.md 这份审稿材料（含作者自己披露的实现细节和疑点），进行模拟审稿。要求：
+1. 每个审稿人给出 4-10 分评分 + Reject/Borderline/Accept 倾向 + 3 条主要意见
+2. 指出最致命的声称问题（按严重度排序）
+3. 给出救活'Gaussian级anti'叙事所需的最小实验集（具体对照组设计）
+4. 给出最诚实的一句话工作定位
+用中文回答，严格、不留情面、基于证据。
+codex
+我将按 `nature-reviewer` 的互盲多审稿人流程处理：先完整读取审稿规范与材料，再分别冻结 R1/R2/R3 意见，最后做跨审稿人严重度汇总与最小实验设计。
+exec
+/bin/bash -lc "sed -n '1,260p' /home/cb/.codex/skills/nature-reviewer/SKILL.md" in /data/MonoDynaGSLAM
+ succeeded in 0ms:
+---
+name: nature-reviewer
+description: >-
+  Simulate Nature-style or general pre-submission peer review from the referee perspective,
+  not an author rebuttal. Use for reviewer reports, mock peer review, manuscript critique,
+  novelty/significance/technical-soundness assessment, 审稿人视角评估, 模拟审稿, 预审,
+  投稿前自审, 审稿意见模拟, or 帮我审一下论文. Produce evidence-grounded Major Concerns,
+  Minor Comments, and blocking flags. For multiple reviewers, keep every reviewer mutually
+  blind in a separate context, freeze all reports before comparison, and create any synthesis
+  only afterward as a separate editor/author-facing artifact.
+---
+
+# Nature Reviewer Assessment Skill
+
+Use this skill to simulate a `Nature`-style reviewer assessment package from the referee
+side.
+
+This skill is for reviewer-style manuscript evaluation, not for drafting the authors'
+response. If the user wants rebuttal writing, route to `nature-response`.
+
+## Default stance
+
+- Ground the review only in the local source basis plus manuscript facts supplied by the user.
+- Evaluate the manuscript against source-grounded axes: `originality`, `scientific importance`, `interdisciplinary readership`, `technical soundness`, and `readability for nonspecialists`.
+- Use the 12-axis technical concern taxonomy only as an internal coverage checklist; it supplements but never replaces the five source-grounded axes.
+- Return exactly `3 mutually blind reviewer reports + 1 post-review synthesis` unless the user explicitly asks for another structure.
+- Give every reviewer only the same immutable manuscript/source packet, the same journal criteria, and that reviewer's preassigned emphasis. Never provide another review, a shared concern ledger, a draft synthesis, or hints about what another reviewer noticed.
+- Run each reviewer in a genuinely separate context, subagent, process, or invocation. If the environment cannot isolate contexts, generate one reviewer report per invocation or explicitly state that mutual blindness cannot be guaranteed; never present shared-context drafting as independent peer review.
+- Define emphasis briefs before any report is generated. They are working lenses, not reviewer identities, specialties, institutions, or biographies.
+- Freeze each individual report before comparing them. Natural duplication or disagreement is valid evidence of independent review and must not be edited away to manufacture diversity.
+- Identify who would be interested in the results and why.
+- Identify technical failings that must be addressed before the authors' case is established.
+- Give every substantive concern a stable ID, a faithful `claim_pointer`, and a verifiable `evidence_pointer`; mark missing locations instead of inventing them.
+- Separate user-visible concerns into `Major Concerns` and `Minor Comments`. Mark a Major Concern
+  `Blocking Yes` only when the current manuscript cannot establish its central case until that
+  concern is resolved; Minor Comments are never blocking.
+- Do not impose a concern quota. If no grounded concern exists at a level, state that explicitly
+  instead of inventing one.
+- Keep the critique intellectually sharp but professionally phrased; severity comes from impact
+  on the manuscript's case, not from hostile wording.
+- Avoid em dashes, en dashes, and colons as routine prose punctuation throughout reviewer reports and synthesis. Prefer a new sentence, comma, semicolon, parentheses, or a short heading followed by a new line. Retain ordinary hyphens in standard compound terms and stable IDs such as `R1-M1`. Preserve punctuation in source-faithful titles, quotations, formulas, identifiers, URLs, times, and required machine-readable syntax when changing it would be inaccurate.
+- Distinguish clearly between what is supported, what is weak, and what is not assessable from the provided material.
+- When the manuscript has a clear technical domain, use claim-dependent domain gates as supporting checks, but keep the output inside the same 3-reviewer `nature-reviewer` structure.
+- Do not claim the editor's final decision or certainty about fit to `Nature`.
+
+## Accepted inputs
+
+The skill may receive:
+
+- full manuscript draft
+- abstract, summary paragraph, or cover-summary style text
+- introduction, results, discussion, or methods excerpts
+- figure legends, selected figures, or result notes
+- author notes in Chinese or English describing the claimed contribution
+- pre-submission positioning notes
+
+If the provided material is partial, perform a bounded review and mark the assessment boundary explicitly.
+
+## Workflow
+
+1. Identify the input scope and whether the job is a reviewer-style assessment rather than rebuttal drafting.
+2. Build one immutable review packet containing only the supplied manuscript, verified source anchors, assessment boundary, and common journal criteria. Do not add analytical conclusions or suspected concerns to this packet.
+3. Define the reviewer count and emphasis briefs before launching any reviewer.
+4. Launch each reviewer in an isolated context. Pass only the immutable review packet, that reviewer's emphasis brief, the common report skeleton, and the same grounding rules.
+5. Inside each isolated review, independently assess readiness and the source-grounded axes, then build that reviewer's own concern ledger using `references/technical-concern-taxonomy.md`. If relevant, load only the applicable section of `references/domain-specific-review-gates.md` inside that same isolated context.
+6. Finalize and freeze every reviewer report. Do not show a completed or partial report to another reviewer, and do not redistribute concerns to control overlap.
+7. Only after all reports are frozen, compare them in a separate synthesis pass. Reconcile independently created concerns to shared synthesis keys, and label consensus only when at least two reports independently raise the same underlying concern.
+8. Generate `Cross-review synthesis (post-review; not shown to reviewers)` with consensus blocking concerns, other major concerns, the minor-revision checklist, and genuine differences in emphasis or judgment.
+9. Run QA for reviewer isolation, severity calibration, blocking calibration, evidence anchoring, groundedness, coverage, role boundaries, and non-invention. Overlap is measured only after freezing and must never trigger retroactive rewriting of individual reports.
+
+## Output format
+
+Unless the user asks for another format, return:
+
+```text
+Review setup
+- **Input scope** [value]
+- **Assessment boundary** [value]
+- **Shared manuscript claim summary** [value]
+- **Visible evidence base** [value]
+- **Missing materials affecting confidence** [value]
+
+Reviewer 1
+- **Overall assessment** [text]
+- **Who would be interested in the results, and why** [text]
+- **Major strengths** [text]
+- **Major Concerns** [items]
+- **Minor Comments** [items]
+- **Technical failings that need to be addressed before the case is established** [IDs or summary]
+- **Assessment against Nature-style criteria** [text]
+- **Recommendation posture** [text]
+
+For each Major Concern
+- **Concern ID** R1-M1
+- **Severity** Major
+- **Blocking** Yes / No
+- **Axis** [value]
+- **Claim pointer** [value]
+- **Evidence pointer** [value]
+- **Concern** [text]
+- **Why it matters** [text]
+- **Resolution test** [text]
+
+For each Minor Comment
+- **Concern ID** R1-m1
+- **Severity** Minor
+- **Axis** [value]
+- **Affected element** [value]
+- **Evidence pointer** [value]
+- **Issue** [text]
+- **Required correction** [text]
+
+Reviewer 2
+[Same structure]
+
+Reviewer 3
+[Same structure]
+
+Cross-review synthesis (post-review; not shown to reviewers)
+- **Consensus strengths** [text]
+- **Consensus blocking concerns** [items]
+- **Other consensus major concerns** [items]
+- **Where emphasis differs across reviewers** [text]
+- **Minor revision checklist** [items]
+- **Broad-interest / significance readout** [text]
+- **Most important issues to resolve before a strong Nature-style case is established** [items]
+
+Risk / unsupported claims
+- [specific unsupported or not-assessable items]
+```
+
+## Red lines
+
+- Do not invent reviewer identities, specialty roles, or selection history.
+- Do not let one reviewer read, cite, anticipate, agree with, or respond to another review.
+- Do not build or distribute a shared concern ledger before individual reports are frozen.
+- Do not rewrite independent reports after comparison merely to reduce duplication or create artificial disagreement.
+- Do not call reports mutually blind when they were generated in a shared context without an explicit limitation notice.
+- Do not use dash punctuation or colons as habitual sentence connectors when clearer punctuation, headings, or sentence boundaries work.
+- Do not invent experiments, validations, controls, citations, figure details, line numbers, or prior-work distinctions not present in the input.
+- Do not silently turn reviewer assessment into author rebuttal drafting.
+- Do not present the review as an editorial decision letter.
+- Do not state that the manuscript belongs in `Nature` as a settled fact.
+- Do not omit technical failings when the provided evidence does not establish the authors' case.
+- Do not create Major or Minor concerns merely to fill a quota or make reviewer reports look balanced.
+- Do not downgrade a core evidence, validity, ethics, or integrity problem to Minor because it is
+  easy to describe, and do not upgrade a local presentation issue merely to sound severe.
+
+## Related files
+
+| File | Open when |
+|---|---|
+| [references/source-basis.md](references/source-basis.md) | You need source provenance, local rule summaries, or source-vs-implementation boundaries |
+| [references/reviewer-workflow.md](references/reviewer-workflow.md) | You need the invocation order, fact-base extraction flow, or synthesis rules |
+| [references/review-axes.md](references/review-axes.md) | You need the evaluation axes or reviewer weighting logic |
+| [references/technical-concern-taxonomy.md](references/technical-concern-taxonomy.md) | You need the internal 12-axis coverage check, concern ledger, or claim/evidence-pointer rules |
+| [references/domain-specific-review-gates.md](references/domain-specific-review-gates.md) | The manuscript has clear chemistry, engineering, materials, atmospheric, climate-ecology, hydrology, or remote-sensing evidence chains |
+| [references/report-structure.md](references/report-structure.md) | You need the default output contract or section anatomy |
+| [references/role-boundaries.md](references/role-boundaries.md) | You need constraints on reviewer differences and editor-versus-reviewer boundaries |
+| [references/qa-checklist.md](references/qa-checklist.md) | You are finalizing an output and need groundedness / non-invention checks |
+| [../nature-shared/core/consistency-sweep.md](../nature-shared/core/consistency-sweep.md) | You are checking the manuscript against itself: headline counts that do not reconcile with the Methods, one metric at two precisions, a superlative contradicted by the paper's own table, overlapping error bars presented as an advantage, or internal summaries that disagree |
+| [references/editorial criteria and processes.md](<references/editorial criteria and processes.md>) | You need the primary local Nature source text |
+
+## Source hierarchy
+
+Use sources in this order:
+
+1. `references/editorial criteria and processes.md`
+2. manuscript facts supplied by the user
+3. conservative local implementation rules documented in `references/source-basis.md`
+4. domain-specific supporting gates in `references/domain-specific-review-gates.md`
+
+If a user asks for policy-level certainty beyond this local source, state the limit instead of improvising broader journal policy.
+
+exec
+/bin/bash -lc "sed -n '1,320p' docs/review/codex-review-input.md" in /data/MonoDynaGSLAM
+ succeeded in 0ms:
+# 模拟审稿材料（诚实版，含实现细节披露）
+
+> 提交给 codex 模拟审稿。请以 CVPR/ICRA 审稿人视角严格评审。
+> 声明：以下全部如实，包括实现与声称不符之处。
+
+## 1. 方法声称（论文叙事）
+
+**MonGauss**：单目动态 3DGS 组件化管线，核心贡献是"Gaussian 级 anti-dynamic"：
+- 渲染残差 → 逐高斯 opacity 下调（声称 Gaussian 级操作）
+- 与帧级 loss 降权对比，证明帧级失效（19.5dB vs 25.4dB）
+- 声称 anti 在非 GT 初始化下改善更大（PnP init +4.1dB vs GT init +1.4dB）
+
+## 2. 实际实现（⚠️ 与声称的差距）
+
+```python
+@torch.no_grad()
+def anti_update():
+    # 每 200 iter 调用一次
+    rends = render(all frames)
+    residual = |pred - gt|.mean(per pixel)   # (N,H,W)
+    for fi in frames:
+        med = residual[fi].median(); std = ...
+        dyn_frac = (residual[fi] > med + tau*std).mean()  # 该帧动态像素比例（标量！）
+        if dyn_frac > 0.01:
+            opacities.data.mul_(max(0.9, 1.0 - 0.02*dyn_frac*10))  # ⚠️ 全局乘！
+```
+
+**关键问题**：
+1. `opacities.data.mul_(decay)` 是**全局衰减所有高斯**，不是选择性压制动态高斯。dynamic_frac 只是一个标量调制衰减幅度。
+2. 没有把残差定位到具体高斯（没有用 gsplat 的 Gaussian ID rasterization 或 alpha 反传）。
+3. "Gaussian 级"的声称在当前实现中**不成立**——实际是"帧级信号调制的全局衰减"。
+4. 效果来源可能只是"降低全体 opacity → 隐式正则化"，而非动态高斯识别。
+
+## 3. 实验数据（全部真实）
+
+### GT pose 初始化 + 微调（500 iter 或 3000 iter）
+
+| 序列 | 配置 | PSNR | ATE |
+|---|---|---|---|
+| fr1_desk (静态) | baseline | 24.43 dB | 1.38 cm |
+| fr3_walking_xyz | baseline | 24.03 dB | 1.52 cm |
+| fr3_walking_xyz | anti τ=2.5 | 25.42 dB | — |
+| fr3_walking_xyz | anti τ=1.5 | 23.51 dB | — |
+| Bonn balloon | baseline | 25.30 dB | — |
+| Bonn balloon | anti τ=2.5 | 29.49 dB | — |
+| fr3_walking_xyz | 帧级 loss 降权 | 19.54 dB | — |
+
+### PnP 初始化（非 GT）
+
+| 序列 | 配置 | PSNR | ATE |
+|---|---|---|---|
+| fr3_walking_xyz | PnP only（无 anti，无优化）| 16.2 dB | 5.98 cm |
+| fr3_walking_xyz | PnP + anti + 位姿微调 | 20.3 dB | 6.6 cm（恶化 0.6）|
+| Bonn balloon | PnP only | — | 2.57 cm |
+| Bonn balloon | PnP + anti + 微调 | 27.0 dB | 3.4 cm（恶化 0.8）|
+
+### 实验设置
+
+- 分辨率 320×240（原始 640×480 的 1/2）
+- 50 帧（walking）/ 44 帧（Bonn），从序列开头截取
+- 60k 高斯（Bonn PnP 用 40k）
+- Metric3D vit_small 深度先验（离线预计算）
+- 单 seed，无重复
+- 2060 6GB
+
+## 4. 帧级降权对照的实现
+
+```python
+# 帧级降权（证伪对照）
+per_frame_mse = mse(pred, gt, per frame)
+median_psnr = per_frame_psnr.median()
+weight = sigmoid((per_frame_psnr - median_psnr + tau) / 0.5)
+recon_loss = (per_frame_mse * weight.detach()).mean()
+```
+
+⚠️ 这个对照把高残差帧整体降权。审稿人可能说"你的帧级基线做弱了"（比如更好的做法是 per-pixel 帧内加权，或直接 mask 掉高残差像素）。
+
+## 5. 我们自己已知的疑点（请重点审查）
+
+1. **全局 opacity 衰减 vs 选择性压制的区分实验没做**：全局衰减也可能带来同样提升（作为隐式正则化），那"Gaussian 级"叙事就是错的。
+2. **对照组公平性**：帧级降权是不是故意做弱？
+3. **没有 per-pixel mask 对照**：最直接的对照是"把高残差像素的 loss mask 掉"（Dy3DGS 类方法的标准做法），我们没做这个对照。
+4. **单 seed、单分辨率、短序列**：50 帧 320×240，结论的统计强度弱。
+5. **PSNR 评估的是重建训练帧自身**（没有 held-out novel view），PSNR 提升可能只是过拟合差异。
+6. **与 WildGS/Gassidy 无同协议数字对比**。
+7. Gassidy (ICRA'25, RGB-D) 已经用"渲染 loss flow 过滤动态"，我们的"渲染残差过滤"在单目下做同样的事——novelty 是"单目 + 无学习先验"还是机制本身？
+
+## 6. 请 codex 输出
+
+1. 模拟 3 个审稿人（R1 严格、R2 方法论、R3 领域专家）的评分和意见（Reject/Borderline/Accept）
+2. 指出当前声称中最站不住脚的点，按致命程度排序
+3. 如果要救活"Gaussian 级"叙事，最少需要补哪些实验（具体到对照组设计）
+4. novelty 的真实定位：这个工作最诚实的一句话定位是什么
+
+exec
+/bin/bash -lc 'cat /home/cb/.codex/skills/nature-reviewer/references/reviewer-workflow.md' in /data/MonoDynaGSLAM
+exec
+/bin/bash -lc 'cat /home/cb/.codex/skills/nature-reviewer/references/qa-checklist.md' in /data/MonoDynaGSLAM
+ succeeded in 0ms:
+# Reviewer workflow
+
+## Contents
+
+- [Default execution order](#default-execution-order)
+- [Input handling](#input-handling)
+- [Immutable review-packet checklist](#immutable-review-packet-checklist)
+- [Concern-ledger fields](#concern-ledger-fields)
+- [Cross-review generation rule](#cross-review-generation-rule)
+- [Failure-safe behaviour](#failure-safe-behaviour)
+
+
+## Default execution order
+
+1. Identify the input package.
+   - Determine whether the user supplied a full manuscript, abstract-only draft, selected sections, figures, notes, or a pre-submission concept summary.
+2. Build an immutable review packet.
+   - Include the supplied manuscript/source, verified source anchors, assessment boundary, and common journal criteria.
+   - Do not include suspected concerns, a shared interpretation, another report, or a draft synthesis.
+3. Define all reviewer emphasis briefs before review begins.
+   - Keep the source packet and report skeleton identical; vary only the declared emphasis.
+4. Generate each reviewer report in an isolated context.
+   - Give the reviewer only the immutable packet, common rules, report skeleton, and its own emphasis brief.
+   - Within that context, independently extract the central claim, key evidence, stated significance, implied audience, visible limitations, and missing material.
+   - Independently apply `originality`, `scientific importance`, `interdisciplinary interest`, `technical soundness`, and `readability for nonspecialists`.
+5. Build one private concern ledger per reviewer.
+   - Load `technical-concern-taxonomy.md` and mark each axis `applicable`, `not applicable`, or `not assessable` without access to any other reviewer's ledger.
+   - Give every supported concern a reviewer-local issue key, `major` or `minor` severity, a blocking flag for Major Concerns, severity rationale, `claim_pointer`, `evidence_pointer`, and resolution test.
+   - Keep the ledger private to that reviewer; expose only the fields needed to make emitted concerns traceable.
+6. Freeze all reviewer reports.
+   - Do not let reviewers read, cite, agree with, answer, or anticipate one another.
+   - Do not redistribute, add, remove, or rephrase concerns after comparison merely to change overlap.
+   - Render separate `Major Concerns` and `Minor Comments` sections. If a tier has no grounded item, write `None identified from the supplied material` rather than filling a quota.
+7. Generate a post-review synthesis in a separate context.
+   - Summarize consensus blocking concerns, other major concerns, the minor-revision checklist,
+     points of emphasis divergence, and the most decision-relevant technical and significance risks.
+   - Reconcile reviewer-local issue keys only now. Treat an issue as consensus only when at least two frozen reports independently raise the same underlying concern.
+8. Run final QA.
+   - Check context isolation, locked-report status, evidence anchors, post hoc overlap mapping, groundedness, consistency, coverage, and non-invention.
+
+## Input handling
+
+- Acceptable inputs include:
+  - manuscript draft
+  - abstract or summary paragraph
+  - introduction, results, discussion, or methods excerpts
+  - figure legends or selected figures
+  - author notes describing the claimed contribution
+- If the input is thin, the skill should still provide a bounded review, but it must clearly state the assessment boundary.
+
+## Immutable review-packet checklist
+
+- Put only these common inputs into every isolated reviewer context:
+  - supplied manuscript/source material
+  - verified section, figure, table, equation, page, or block anchors
+  - assessment boundary and missing-file inventory
+  - common journal criteria and report skeleton
+  - that reviewer's preassigned emphasis brief
+- Do not put these into the shared packet:
+  - extracted concerns or visible technical gaps
+  - a shared claim-evidence interpretation
+  - another reviewer report or ledger
+  - overlap targets, consensus labels, or synthesis notes
+
+## Concern-ledger fields
+
+Use this internal shape before drafting reviewer prose:
+
+```yaml
+issue_key: experimental-design-control-selection
+axis: experimental-design
+applicability: applicable
+severity: major
+blocking: yes
+severity_rationale: The missing control prevents the supplied comparison from isolating the central treatment effect.
+claim_pointer: The treatment effect is attributed to the intervention.
+evidence_pointer: Results, "Primary outcome"; Figure 2
+evidence_status: located
+concern: The supplied comparison does not isolate the intervention effect.
+resolution_test: Show an appropriate control or narrow the causal claim.
+reviewer_id: Reviewer 1
+```
+
+- Use section headings and supplied figure/table identifiers before page or line numbers.
+- Use `location not provided` or `not assessable from supplied material` when an exact pointer cannot be verified.
+- Never infer an absent figure, analysis, control, or manuscript location.
+- Use `blocking: yes` only for a grounded Major Concern that prevents the current manuscript from
+  establishing its central case. Minor Comments always use `blocking: no` internally and do not
+  need to display the field in the final report.
+
+## Cross-review generation rule
+
+- Run synthesis only after all individual reports are final and locked.
+- Treat the synthesis as editor/author-facing; never send it back into any reviewer context.
+- The cross-review synthesis should consolidate, not average away, reviewer differences.
+- A consensus item must map post hoc to equivalent concerns raised by at least two reviewer reports.
+- Preserve consequential single-reviewer concerns under weighting differences; do not drop them merely because they lack consensus.
+- It must separate:
+  - shared strengths
+  - consensus blocking concerns
+  - other shared major concerns
+  - minor revision checklist
+  - differences in significance weighting
+  - differences in readership/readability judgment
+
+## Failure-safe behaviour
+
+- If isolated contexts are unavailable, produce one reviewer report per invocation or disclose that mutual blindness cannot be guaranteed. Do not silently simulate independence inside a shared drafting context.
+- When evidence is absent, say the case is not yet established from the supplied material.
+- When significance is unclear, distinguish `potentially interesting` from `demonstrated broad importance`.
+- When readability is weak, describe the barrier to nonspecialist comprehension instead of rewriting the manuscript unless asked.
+
+exec
+/bin/bash -lc 'cat /home/cb/.codex/skills/nature-reviewer/references/technical-concern-taxonomy.md' in /data/MonoDynaGSLAM
+ succeeded in 0ms:
+# QA checklist
+
+## Reviewer-isolation checks
+
+- Reviewer emphasis briefs were fixed before any report was generated.
+- Each reviewer received only the immutable manuscript/source packet, common criteria, report skeleton, and its own emphasis brief.
+- Each reviewer ran in a separate context, subagent, process, or invocation and received no other review, ledger, synthesis, consensus hint, or overlap target.
+- Every individual report was finalized and locked before comparison began.
+- No individual report cites, agrees with, answers, anticipates, or refers to another reviewer.
+- Cross-review synthesis was generated afterward in a separate editor/author-facing pass and was not fed back to reviewers.
+- If technical isolation was unavailable, the output explicitly says mutual blindness was not guaranteed or provides only one reviewer report for the invocation.
+
+## Grounding checks
+
+- Every substantive evaluation should be traceable to either:
+  - `references/editorial criteria and processes.md`, or
+  - manuscript facts explicitly supplied by the user.
+- No reviewer persona detail should appear beyond allowed `emphasis` labels.
+- No technical failing should be invented from domain habit alone when the supplied material does not show it.
+- Every substantive concern has a stable concern ID, `claim_pointer`, and `evidence_pointer`.
+- Page, line, figure, and table identifiers are supplied or directly verified; otherwise the pointer says `location not provided` or `not assessable from supplied material`.
+
+## Technical coverage checks
+
+- The internal 12-axis matrix was considered without being dumped into the final report.
+- Each axis is marked internally as `applicable`, `not applicable`, or `not assessable`; absence of evidence is not silently treated as a defect.
+- The technical taxonomy supplements the five source-grounded Nature axes and does not create policy claims or severity statistics.
+
+## Severity and blocking checks
+
+- Every emitted concern is classified as Major or Minor from its impact on the manuscript's case,
+  not from tone, difficulty, cost, or a desired quota.
+- Every Major Concern displays `Blocking Yes` or `Blocking No` and gives a rationale consistent
+  with the concern and resolution test.
+- `Blocking Yes` is used only when the current manuscript cannot establish its central case until
+  the concern is resolved.
+- No Minor Comment is blocking, and no core evidence, validity, ethics, or integrity problem is
+  downgraded to Minor merely because it can be described briefly.
+- Localized presentation, terminology, citation, and reporting issues remain Minor unless they
+  materially affect inference or reproducibility.
+- Empty tiers say `None identified from the supplied material`; concerns are never invented to fill
+  Major/Minor sections or equalize reviewer counts.
+
+## Coverage checks
+
+- Confirm all three reviewer reports exist.
+- Confirm all reviewers received the same source packet and criteria, with only their preassigned emphasis briefs differing; no invented identity or unequal evidence access explains their conclusions.
+- Confirm each reviewer still addresses all core axes, even if briefly.
+- Confirm each reviewer visibly contains both `Major Concerns` and `Minor Comments` sections.
+- Confirm a `Cross-review synthesis (post-review; not shown to reviewers)` section exists.
+- Confirm a `Risk / unsupported claims` section exists.
+
+## Boundary checks
+
+- Confirm the output stays in reviewer-assessment mode, not author-response mode.
+- Confirm the output does not claim a final editorial decision.
+- Confirm broad-interest judgment is expressed cautiously, because the source assigns that final judgment to editors.
+
+## Style checks
+
+- Reviewer reports and synthesis avoid em dashes, en dashes, and colons as routine prose punctuation when a sentence boundary, comma, semicolon, parentheses, or a short label followed by a new line would be clearer.
+- Necessary hyphens in compound terms and stable IDs such as `R1-M1` remain intact.
+- Source-faithful titles, quotations, formulas, identifiers, URLs, times, and required machine-readable syntax are not altered merely to remove punctuation.
+
+## Non-invention checks
+
+- No invented reviewer identity, specialty, institution, or selection history.
+- No invented experiments, controls, analyses, line numbers, citations, prior-work details, or figure-specific content absent from the input.
+- If evidence is partial, mark `AUTHOR_INPUT_NEEDED` or `Not assessable from provided material`.
+
+## Consistency checks
+
+- Verifiable manuscript facts should stay consistent across all three reviewers even though their analyses were independent.
+- Divergence may reflect weighting or interpretation of the same evidence, not access to different or invented facts.
+- Technical failings listed in the synthesis should match issues already raised in at least one individual report.
+- Consensus issues were raised by at least two reviewer reports and map to the same underlying issue key.
+- Consensus blocking and other consensus major concerns preserve the original severity and
+  blocking status of the source concerns.
+- The minor-revision checklist contains only supported Minor Comments and cross-references their IDs.
+- Preserve important single-reviewer concerns as weighting differences instead of deleting them.
+
+## Overlap checks
+
+- Normalize concerns to synthesis keys only after all individual reports are frozen.
+- Measure pairwise overlap descriptively as `shared synthesis keys / smaller report issue count` when useful.
+- Do not revise, redistribute, suppress, or add concerns to hit an overlap target. High overlap can be legitimate independent consensus; low overlap can be legitimate difference in judgment.
+- Deduplicate only inside the post-review synthesis and preserve links to the original reviewer-local concern IDs.
+
+## Final release rule
+
+- If the skill cannot produce a grounded three-reviewer package without major invention, it should return a bounded draft review with explicit missing-information flags rather than pretending certainty.
+- If the skill cannot isolate reviewer contexts, it must not label a multi-reviewer package mutually blind; use separate invocations or state the technical limitation.
+- Do not release the report when Major/Minor labels or Blocking flags conflict with their stated
+  rationale, manuscript impact, or resolution test.
+- Do not release habitual dash-heavy or colon-heavy prose without first rewriting it with clearer sentence structure.
+
+ succeeded in 0ms:
+# Technical concern taxonomy
+
+Use this reference to build an internal concern ledger after the five source-grounded Nature axes have been assessed. It is a coverage and traceability aid, not an official journal taxonomy, reviewer-persona selector, or historical-frequency model.
+
+## Twelve internal axes
+
+| Axis | Check only when applicable |
+|---|---|
+| `novelty-significance` | The claimed advance is distinguished from prior work and its importance is supported rather than asserted. |
+| `mechanism-evidence` | Mechanistic statements are supported by discriminating evidence rather than a compatible observation alone. |
+| `experimental-design` | Comparators, controls, replication units, conditions, sampling, and bias controls support the stated inference. |
+| `statistical-rigor` | Estimands, assumptions, uncertainty, multiplicity, power, and model validation are adequate for the claim. |
+| `reproducibility` | Methods, code, data, versions, seeds, protocols, and reporting detail permit independent scrutiny or reuse where appropriate. |
+| `clinical-validity` | Cohort definition, endpoint choice, external validation, calibration, clinical utility, and generalizability support clinical claims. |
+| `ethical-governance` | Human/animal approvals, consent, privacy, dual-use, permissions, and responsible data handling are reported when required. |
+| `data-resource-quality` | Dataset completeness, provenance, documentation, quality control, accessibility, and intended reuse are credible. |
+| `figures-and-tables` | Visual encodings, labels, denominators, uncertainty, scale bars, legends, and accessibility accurately represent the results. |
+| `writing-clarity` | The argument, terminology, abstract/body consistency, and nonspecialist explanation make the evidence chain understandable. |
+| `claim-moderation` | Strength, scope, novelty, generality, and translational language do not exceed the supplied evidence. |
+| `causal-vs-correlative` | Association, prediction, mediation, intervention, and causation are distinguished according to study design and evidence. |
+
+## Applicability rule
+
+For every axis, record one of:
+
+- `applicable`: the manuscript makes a claim or presents evidence that activates the check;
+- `not applicable`: the axis is genuinely outside the manuscript's design or claims;
+- `not assessable`: the axis could matter, but the supplied material is insufficient.
+
+Do not turn `not assessable` into a presumed flaw. State the assessment boundary when the missing material affects confidence.
+
+## Concern construction
+
+Emit a concern only when it is supported by the supplied manuscript material. Record:
+
+- `issue_key`: a concise normalized key used to detect overlap;
+- `axis`: one primary technical axis;
+- `severity`: `major` or `minor` according to effect on the authors' case;
+- `blocking`: `yes` or `no`; only a Major Concern may be blocking;
+- `severity_rationale`: one sentence explaining the concern's effect on the central case;
+- `claim_pointer`: a faithful paraphrase of the challenged claim or affected reporting element;
+- `evidence_pointer`: a verified section, figure, table, page, or line location;
+- `evidence_status`: `located`, `location_missing`, or `not_assessable`;
+- `concern`: why the visible evidence does not yet support the claim or reporting need;
+- `resolution_test`: what evidence, analysis, clarification, or claim adjustment would close the concern.
+
+Use `location not provided` when the critique is grounded but the exact location cannot be verified. Never manufacture a location to make the ledger look complete.
+
+## Severity and blocking calibration
+
+Classify impact, not tone, difficulty, cost, or preferred reviewer style.
+
+| Classification | Use when | Typical resolution |
+|---|---|---|
+| `major`, `blocking: yes` | The current evidence cannot establish a central conclusion, or a validity, ethics, governance, or data-integrity problem prevents a credible scientific case. | Decisive evidence or analysis, correction of the invalid design/reporting, transparent integrity resolution, or narrowing/removal of the unsupported central claim. |
+| `major`, `blocking: no` | The issue materially weakens inference, novelty, significance, generalizability, reproducibility, or an important part of the evidence chain, but does not by itself invalidate the entire central case. | Substantive analysis, validation, methodological clarification, structural revision, stronger comparison, or meaningful claim moderation. |
+| `minor`, `blocking: no` | The issue is localized and does not change the central conclusion or interpretation of the core evidence. | Precise wording, definition, citation, figure/table/legend correction, localized reporting detail, or limited clarification. |
+
+Calibration rules:
+
+- A missing detail is Major when it prevents evaluation or reproduction of a result central to the
+  paper; it is Minor when the result remains interpretable and the correction is localized.
+- A figure or statistical issue is not automatically Minor. Misleading uncertainty, denominators,
+  scales, tests, or replicate definitions may be Major or blocking when they affect inference.
+- A writing issue is Major when ambiguity changes the main claim or scientific interpretation;
+  ordinary clarity, terminology, and formatting issues are Minor.
+- `not assessable` is an evidence-status label, not a severity. Do not convert absent material into
+  a Major Concern unless the supplied package was expected to contain it and the omission itself is
+  verifiable.
+- Minor Comments must be actionable and manuscript-specific; omit taste-only copyediting.
+- Never manufacture concerns to meet a numeric quota. Use `None identified from the supplied
+  material` when a severity tier has no grounded item.
+
+## Reviewer-local use
+
+- Keep the visible labels as `Reviewer 1`, `Reviewer 2`, and `Reviewer 3` with preassigned emphasis briefs.
+- Apply the taxonomy independently inside each isolated reviewer context. Do not allocate concerns or axes based on another report.
+- Do not expose specialist personas such as `Statistics Reviewer` or infer reviewer-selection history.
+- Use reviewer-local issue keys while drafting. Map equivalent concerns to synthesis keys only after all reports are frozen.
+- Classify Major and Minor concerns according to evidence and emphasis, not fixed counts. A reviewer
+  may legitimately have no concern at one severity level.
+
+2026-09-01T15:34:32.940918Z ERROR codex_core::session::session: failed to load skill /home/cb/.cc-switch/skills/3dgs-experiment-planner/SKILL.md: missing YAML frontmatter delimited by ---
+2026-09-01T15:34:32.940994Z ERROR codex_core::session::session: failed to load skill /home/cb/.cc-switch/skills/3dgs-paper-reader/SKILL.md: missing YAML frontmatter delimited by ---
+2026-09-01T15:34:52.632075Z ERROR codex_core::session::session: failed to load skill /home/cb/.cc-switch/skills/3dgs-experiment-planner/SKILL.md: missing YAML frontmatter delimited by ---
+2026-09-01T15:34:52.632099Z ERROR codex_core::session::session: failed to load skill /home/cb/.cc-switch/skills/3dgs-paper-reader/SKILL.md: missing YAML frontmatter delimited by ---
+exec
+/bin/bash -lc pwd in /data/MonoDynaGSLAM
+ succeeded in 0ms:
+/data/MonoDynaGSLAM
+
+2026-09-01T15:36:33.486881Z ERROR codex_core::session::session: failed to load skill /home/cb/.cc-switch/skills/3dgs-experiment-planner/SKILL.md: missing YAML frontmatter delimited by ---
+2026-09-01T15:36:33.486904Z ERROR codex_core::session::session: failed to load skill /home/cb/.cc-switch/skills/3dgs-paper-reader/SKILL.md: missing YAML frontmatter delimited by ---
+exec
+/bin/bash -lc "nl -ba docs/review/codex-review-input.md | sed -n '1,260p'" in /data/MonoDynaGSLAM
+ succeeded in 0ms:
+     1	# 模拟审稿材料（诚实版，含实现细节披露）
+     2	
+     3	> 提交给 codex 模拟审稿。请以 CVPR/ICRA 审稿人视角严格评审。
+     4	> 声明：以下全部如实，包括实现与声称不符之处。
+     5	
+     6	## 1. 方法声称（论文叙事）
+     7	
+     8	**MonGauss**：单目动态 3DGS 组件化管线，核心贡献是"Gaussian 级 anti-dynamic"：
+     9	- 渲染残差 → 逐高斯 opacity 下调（声称 Gaussian 级操作）
+    10	- 与帧级 loss 降权对比，证明帧级失效（19.5dB vs 25.4dB）
+    11	- 声称 anti 在非 GT 初始化下改善更大（PnP init +4.1dB vs GT init +1.4dB）
+    12	
+    13	## 2. 实际实现（⚠️ 与声称的差距）
+    14	
+    15	```python
+    16	@torch.no_grad()
+    17	def anti_update():
+    18	    # 每 200 iter 调用一次
+    19	    rends = render(all frames)
+    20	    residual = |pred - gt|.mean(per pixel)   # (N,H,W)
+    21	    for fi in frames:
+    22	        med = residual[fi].median(); std = ...
+    23	        dyn_frac = (residual[fi] > med + tau*std).mean()  # 该帧动态像素比例（标量！）
+    24	        if dyn_frac > 0.01:
+    25	            opacities.data.mul_(max(0.9, 1.0 - 0.02*dyn_frac*10))  # ⚠️ 全局乘！
+    26	```
+    27	
+    28	**关键问题**：
+    29	1. `opacities.data.mul_(decay)` 是**全局衰减所有高斯**，不是选择性压制动态高斯。dynamic_frac 只是一个标量调制衰减幅度。
+    30	2. 没有把残差定位到具体高斯（没有用 gsplat 的 Gaussian ID rasterization 或 alpha 反传）。
+    31	3. "Gaussian 级"的声称在当前实现中**不成立**——实际是"帧级信号调制的全局衰减"。
+    32	4. 效果来源可能只是"降低全体 opacity → 隐式正则化"，而非动态高斯识别。
+    33	
+    34	## 3. 实验数据（全部真实）
+    35	
+    36	### GT pose 初始化 + 微调（500 iter 或 3000 iter）
+    37	
+    38	| 序列 | 配置 | PSNR | ATE |
+    39	|---|---|---|---|
+    40	| fr1_desk (静态) | baseline | 24.43 dB | 1.38 cm |
+    41	| fr3_walking_xyz | baseline | 24.03 dB | 1.52 cm |
+    42	| fr3_walking_xyz | anti τ=2.5 | 25.42 dB | — |
+    43	| fr3_walking_xyz | anti τ=1.5 | 23.51 dB | — |
+    44	| Bonn balloon | baseline | 25.30 dB | — |
+    45	| Bonn balloon | anti τ=2.5 | 29.49 dB | — |
+    46	| fr3_walking_xyz | 帧级 loss 降权 | 19.54 dB | — |
+    47	
+    48	### PnP 初始化（非 GT）
+    49	
+    50	| 序列 | 配置 | PSNR | ATE |
+    51	|---|---|---|---|
+    52	| fr3_walking_xyz | PnP only（无 anti，无优化）| 16.2 dB | 5.98 cm |
+    53	| fr3_walking_xyz | PnP + anti + 位姿微调 | 20.3 dB | 6.6 cm（恶化 0.6）|
+    54	| Bonn balloon | PnP only | — | 2.57 cm |
+    55	| Bonn balloon | PnP + anti + 微调 | 27.0 dB | 3.4 cm（恶化 0.8）|
+    56	
+    57	### 实验设置
+    58	
+    59	- 分辨率 320×240（原始 640×480 的 1/2）
+    60	- 50 帧（walking）/ 44 帧（Bonn），从序列开头截取
+    61	- 60k 高斯（Bonn PnP 用 40k）
+    62	- Metric3D vit_small 深度先验（离线预计算）
+    63	- 单 seed，无重复
+    64	- 2060 6GB
+    65	
+    66	## 4. 帧级降权对照的实现
+    67	
+    68	```python
+    69	# 帧级降权（证伪对照）
+    70	per_frame_mse = mse(pred, gt, per frame)
+    71	median_psnr = per_frame_psnr.median()
+    72	weight = sigmoid((per_frame_psnr - median_psnr + tau) / 0.5)
+    73	recon_loss = (per_frame_mse * weight.detach()).mean()
+    74	```
+    75	
+    76	⚠️ 这个对照把高残差帧整体降权。审稿人可能说"你的帧级基线做弱了"（比如更好的做法是 per-pixel 帧内加权，或直接 mask 掉高残差像素）。
+    77	
+    78	## 5. 我们自己已知的疑点（请重点审查）
+    79	
+    80	1. **全局 opacity 衰减 vs 选择性压制的区分实验没做**：全局衰减也可能带来同样提升（作为隐式正则化），那"Gaussian 级"叙事就是错的。
+    81	2. **对照组公平性**：帧级降权是不是故意做弱？
+    82	3. **没有 per-pixel mask 对照**：最直接的对照是"把高残差像素的 loss mask 掉"（Dy3DGS 类方法的标准做法），我们没做这个对照。
+    83	4. **单 seed、单分辨率、短序列**：50 帧 320×240，结论的统计强度弱。
+    84	5. **PSNR 评估的是重建训练帧自身**（没有 held-out novel view），PSNR 提升可能只是过拟合差异。
+    85	6. **与 WildGS/Gassidy 无同协议数字对比**。
+    86	7. Gassidy (ICRA'25, RGB-D) 已经用"渲染 loss flow 过滤动态"，我们的"渲染残差过滤"在单目下做同样的事——novelty 是"单目 + 无学习先验"还是机制本身？
+    87	
+    88	## 6. 请 codex 输出
+    89	
+    90	1. 模拟 3 个审稿人（R1 严格、R2 方法论、R3 领域专家）的评分和意见（Reject/Borderline/Accept）
+    91	2. 指出当前声称中最站不住脚的点，按致命程度排序
+    92	3. 如果要救活"Gaussian 级"叙事，最少需要补哪些实验（具体到对照组设计）
+    93	4. novelty 的真实定位：这个工作最诚实的一句话定位是什么
+
+collab: Wait
+codex
+## 评审边界
+
+以下三份报告在互盲上下文中独立完成，之后才汇总。证据仅限 [codex-review-input.md](/data/MonoDynaGSLAM/docs/review/codex-review-input.md:1)，不等同于完整论文和代码审查。
+
+## R1 严格方法学审稿人
+
+**评分 4/10，Reject**
+
+1. **核心机制与实现直接矛盾，Blocking。** 论文声称“逐 Gaussian 抑制”，但实际先把残差压缩为帧级标量 `dyn_frac`，再对全部 opacity 统一乘同一个系数。没有像素到 Gaussian 的责任归因，也没有 Gaussian 间的选择性。这不是“实验尚未充分证明”，而是当前代码根本没有实现所声称的机制。[证据](/data/MonoDynaGSLAM/docs/review/codex-review-input.md:15)
+
+2. **关键比较无法识别 anti 的独立作用，Blocking。** `PnP only` 与 `PnP + anti + 位姿微调` 同时改变两个变量，因此 +4.1 dB 不能归因于 anti。帧级降权与全局 opacity 衰减也不是等价干预，25.42 对 19.54 dB 不能证明粒度优势。[证据](/data/MonoDynaGSLAM/docs/review/codex-review-input.md:48)
+
+3. **结论范围远超证据，Blocking。** 单 seed、44 至 50 个训练帧、半分辨率、训练视图 PSNR、缺失完整 ATE。τ 从 2.5 改为 1.5 后甚至低于 baseline，说明方法明显敏感。目前连稳定的重建收益都未建立，更谈不上动态 SLAM 改善。[证据](/data/MonoDynaGSLAM/docs/review/codex-review-input.md:57)
+
+## R2 实验严谨性审稿人
+
+**评分 4/10，Reject**
+
+1. **缺失决定性机制消融，Blocking。** 必须排除固定全局衰减、匹配衰减量的随机策略和普通稀疏正则化。只要这些对照能复现提升，“anti-dynamic”解释就失败。
+
+2. **对照组明显偏弱，Blocking。** 当前帧级方法会把高残差帧中的静态区域监督一并丢弃。这只能说明某个具体帧权重公式效果差，不能证明帧级方法失效，更不能证明 Gaussian 级方法必要。缺失 per-pixel hard mask、soft weighting 和 robust loss 是不可接受的。[证据](/data/MonoDynaGSLAM/docs/review/codex-review-input.md:66)
+
+3. **评估不具统计和泛化意义，Blocking。** 没有重复实验、置信区间、held-out 帧或 novel-view 指标。迭代数写成“500 或 3000”，部分实验使用不同 Gaussian 数量，多数配置缺失 ATE。当前 dB 差值不能被视为可复现结论。
+
+## R3 动态 SLAM 领域审稿人
+
+**评分 4/10，Reject**
+
+1. **方法不能被称为动态 Gaussian 抑制，Blocking。** 对参数张量做全局缩放不等于 Gaussian 级选择。当前算法不知道哪个 Gaussian 属于动态物体，也没有证据表明被压低的 opacity 与动态区域存在空间对应。
+
+2. **新颖性没有建立，Blocking。** 材料已承认 Gassidy 使用渲染 loss flow 过滤动态，但没有同协议 WildGS、Gassidy 或像素残差过滤基线。当前贡献可能只是把已有残差过滤思想移植到单目 3DGS，并采用全局 opacity decay，而不是新机制。[证据](/data/MonoDynaGSLAM/docs/review/codex-review-input.md:78)
+
+3. **SLAM 定位被现有结果反驳，Blocking。** walking 的 ATE 从 5.98 cm 恶化到 6.6 cm，Bonn 从 2.57 cm 恶化到 3.4 cm。训练视图 PSNR 上升而轨迹精度下降，最多说明外观拟合与几何精度发生了交换，不能表述为 SLAM 改善。
+
+## 最致命的声称问题
+
+按严重度排序如下。
+
+1. **“Gaussian 级 anti-dynamic”属于事实性错误。** 当前更新在 Gaussian 维度上完全均匀。
+2. **“收益来自动态 Gaussian 抑制”没有机制证据。** 全局 opacity 正则化是未排除且更直接的替代解释。
+3. **“非 GT 初始化下 anti 提升更大”不可归因。** anti 与位姿微调被捆绑，且 ATE 实际恶化。
+4. **“帧级方法失效”是过度概括。** 只击败了一个会丢弃整帧静态监督的弱基线。
+5. **“改善动态 SLAM”不成立。** 只有训练帧 PSNR 上升，轨迹指标反向变化。
+6. **新颖性不明确。** 尚未区分新机制、单目移植和工程组件组合。
+
+## 救活 Gaussian 级叙事的最小实验集
+
+首先必须真正实现残差到 Gaussian 的归因，例如按 Gaussian ID、可见性和 alpha contribution 聚合高残差像素，只更新高责任 Gaussian。
+
+在完全相同初始化、训练预算、位姿设置和累计 opacity 变化量下，至少比较：
+
+| 组别 | 设计 | 回答的问题 |
+|---|---|---|
+| A | 无 anti baseline | 基础参照 |
+| B | 当前 `dyn_frac` 调制的全局 decay | 当前实现到底有效多少 |
+| C | 固定日程、累计衰减量匹配的全局 decay | 收益是否只是普通正则化 |
+| D | 随机选择相同数量 Gaussian，匹配单次及累计衰减量 | 选择动态 Gaussian 是否重要 |
+| E | per-pixel residual hard mask 或 robust soft weighting | Gaussian 级操作是否优于强像素基线 |
+| F | 残差归因后的 selective Gaussian anti | 真正待验证的方法 |
+
+F 必须同时满足三项，才足以保留叙事。
+
+- 在至少两个动态序列和一个静态负对照、至少 3 个 seeds 上稳定优于 B、C、D、E。
+- 在 held-out 帧或视角上提高 PSNR、SSIM、LPIPS，而不只是训练帧 PSNR。
+- 被选择 Gaussian 与动态区域具有可量化对应关系，例如动态 mask 上的贡献比例、Gaussian 选择 precision/recall 或 AUROC，而不只是挑选可视化。
+
+PnP 声称还需独立完成 `PnP only`、`PnP + pose refinement`、`PnP + anti`、`PnP + pose refinement + anti` 四组析因实验，并对每组同时报告 ATE/RPE 和渲染指标。若 ATE 仍恶化，应删除 SLAM 改善声称。
+
+## 最诚实的一句话定位
+
+**这是一个由帧级渲染残差统计触发、对全部 Gaussian opacity 统一衰减的单目 3DGS 训练正则化启发式；它在两个短动态训练片段上提高了训练视图 PSNR，但尚未证明能够识别动态 Gaussian、改善泛化或提升 SLAM 轨迹精度。**
+tokens used
+113,477
+## 评审边界
+
+以下三份报告在互盲上下文中独立完成，之后才汇总。证据仅限 [codex-review-input.md](/data/MonoDynaGSLAM/docs/review/codex-review-input.md:1)，不等同于完整论文和代码审查。
+
+## R1 严格方法学审稿人
+
+**评分 4/10，Reject**
+
+1. **核心机制与实现直接矛盾，Blocking。** 论文声称“逐 Gaussian 抑制”，但实际先把残差压缩为帧级标量 `dyn_frac`，再对全部 opacity 统一乘同一个系数。没有像素到 Gaussian 的责任归因，也没有 Gaussian 间的选择性。这不是“实验尚未充分证明”，而是当前代码根本没有实现所声称的机制。[证据](/data/MonoDynaGSLAM/docs/review/codex-review-input.md:15)
+
+2. **关键比较无法识别 anti 的独立作用，Blocking。** `PnP only` 与 `PnP + anti + 位姿微调` 同时改变两个变量，因此 +4.1 dB 不能归因于 anti。帧级降权与全局 opacity 衰减也不是等价干预，25.42 对 19.54 dB 不能证明粒度优势。[证据](/data/MonoDynaGSLAM/docs/review/codex-review-input.md:48)
+
+3. **结论范围远超证据，Blocking。** 单 seed、44 至 50 个训练帧、半分辨率、训练视图 PSNR、缺失完整 ATE。τ 从 2.5 改为 1.5 后甚至低于 baseline，说明方法明显敏感。目前连稳定的重建收益都未建立，更谈不上动态 SLAM 改善。[证据](/data/MonoDynaGSLAM/docs/review/codex-review-input.md:57)
+
+## R2 实验严谨性审稿人
+
+**评分 4/10，Reject**
+
+1. **缺失决定性机制消融，Blocking。** 必须排除固定全局衰减、匹配衰减量的随机策略和普通稀疏正则化。只要这些对照能复现提升，“anti-dynamic”解释就失败。
+
+2. **对照组明显偏弱，Blocking。** 当前帧级方法会把高残差帧中的静态区域监督一并丢弃。这只能说明某个具体帧权重公式效果差，不能证明帧级方法失效，更不能证明 Gaussian 级方法必要。缺失 per-pixel hard mask、soft weighting 和 robust loss 是不可接受的。[证据](/data/MonoDynaGSLAM/docs/review/codex-review-input.md:66)
+
+3. **评估不具统计和泛化意义，Blocking。** 没有重复实验、置信区间、held-out 帧或 novel-view 指标。迭代数写成“500 或 3000”，部分实验使用不同 Gaussian 数量，多数配置缺失 ATE。当前 dB 差值不能被视为可复现结论。
+
+## R3 动态 SLAM 领域审稿人
+
+**评分 4/10，Reject**
+
+1. **方法不能被称为动态 Gaussian 抑制，Blocking。** 对参数张量做全局缩放不等于 Gaussian 级选择。当前算法不知道哪个 Gaussian 属于动态物体，也没有证据表明被压低的 opacity 与动态区域存在空间对应。
+
+2. **新颖性没有建立，Blocking。** 材料已承认 Gassidy 使用渲染 loss flow 过滤动态，但没有同协议 WildGS、Gassidy 或像素残差过滤基线。当前贡献可能只是把已有残差过滤思想移植到单目 3DGS，并采用全局 opacity decay，而不是新机制。[证据](/data/MonoDynaGSLAM/docs/review/codex-review-input.md:78)
+
+3. **SLAM 定位被现有结果反驳，Blocking。** walking 的 ATE 从 5.98 cm 恶化到 6.6 cm，Bonn 从 2.57 cm 恶化到 3.4 cm。训练视图 PSNR 上升而轨迹精度下降，最多说明外观拟合与几何精度发生了交换，不能表述为 SLAM 改善。
+
+## 最致命的声称问题
+
+按严重度排序如下。
+
+1. **“Gaussian 级 anti-dynamic”属于事实性错误。** 当前更新在 Gaussian 维度上完全均匀。
+2. **“收益来自动态 Gaussian 抑制”没有机制证据。** 全局 opacity 正则化是未排除且更直接的替代解释。
+3. **“非 GT 初始化下 anti 提升更大”不可归因。** anti 与位姿微调被捆绑，且 ATE 实际恶化。
+4. **“帧级方法失效”是过度概括。** 只击败了一个会丢弃整帧静态监督的弱基线。
+5. **“改善动态 SLAM”不成立。** 只有训练帧 PSNR 上升，轨迹指标反向变化。
+6. **新颖性不明确。** 尚未区分新机制、单目移植和工程组件组合。
+
+## 救活 Gaussian 级叙事的最小实验集
+
+首先必须真正实现残差到 Gaussian 的归因，例如按 Gaussian ID、可见性和 alpha contribution 聚合高残差像素，只更新高责任 Gaussian。
+
+在完全相同初始化、训练预算、位姿设置和累计 opacity 变化量下，至少比较：
+
+| 组别 | 设计 | 回答的问题 |
+|---|---|---|
+| A | 无 anti baseline | 基础参照 |
+| B | 当前 `dyn_frac` 调制的全局 decay | 当前实现到底有效多少 |
+| C | 固定日程、累计衰减量匹配的全局 decay | 收益是否只是普通正则化 |
+| D | 随机选择相同数量 Gaussian，匹配单次及累计衰减量 | 选择动态 Gaussian 是否重要 |
+| E | per-pixel residual hard mask 或 robust soft weighting | Gaussian 级操作是否优于强像素基线 |
+| F | 残差归因后的 selective Gaussian anti | 真正待验证的方法 |
+
+F 必须同时满足三项，才足以保留叙事。
+
+- 在至少两个动态序列和一个静态负对照、至少 3 个 seeds 上稳定优于 B、C、D、E。
+- 在 held-out 帧或视角上提高 PSNR、SSIM、LPIPS，而不只是训练帧 PSNR。
+- 被选择 Gaussian 与动态区域具有可量化对应关系，例如动态 mask 上的贡献比例、Gaussian 选择 precision/recall 或 AUROC，而不只是挑选可视化。
+
+PnP 声称还需独立完成 `PnP only`、`PnP + pose refinement`、`PnP + anti`、`PnP + pose refinement + anti` 四组析因实验，并对每组同时报告 ATE/RPE 和渲染指标。若 ATE 仍恶化，应删除 SLAM 改善声称。
+
+## 最诚实的一句话定位
+
+**这是一个由帧级渲染残差统计触发、对全部 Gaussian opacity 统一衰减的单目 3DGS 训练正则化启发式；它在两个短动态训练片段上提高了训练视图 PSNR，但尚未证明能够识别动态 Gaussian、改善泛化或提升 SLAM 轨迹精度。**
